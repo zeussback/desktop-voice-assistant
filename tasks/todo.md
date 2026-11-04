@@ -121,32 +121,34 @@
 ### Task 7: Assistant State Machine & Orchestrator
 **Description:** Hotkey, UI Widget, Audio Recorder, Brain ve Voice modüllerini `AssistantController` çatısı altında birbirine bağlar.
 **Acceptance criteria:**
-- [ ] 1. Basış (Ctrl+Space): Widget "Dinleniyor..." animasyonuyla açılır, mikrofon kayda başlar.
-- [ ] 2. Basış (Ctrl+Space): Mikrofon durur, widget "Düşünülüyor..." durumuna geçer, ses Brain'e (Gemini) aktarılır.
-- [ ] Yanıt geldiğinde: Widget "Konuşuyor..." durumuna geçer, Voice motoru sesi üretir ve hoparlörden çalar.
-- [ ] Konuşma bittiğinde: Widget yumuşak bir animasyonla kapanır (IDLE).
+- [x] 1. Basış (Ctrl+Space): Widget "Dinleniyor..." animasyonuyla açılır, mikrofon kayda başlar.
+- [x] 2. Basış (Ctrl+Space): Mikrofon durur, widget "Düşünülüyor..." durumuna geçer, ses Brain'e (Gemini) aktarılır.
+- [x] Yanıt geldiğinde: Widget "Konuşuyor..." durumuna geçer, Voice motoru sesi üretir ve hoparlörden çalar.
+- [x] Konuşma bittiğinde: Widget yumuşak bir animasyonla kapanır (IDLE).
 **Verification:**
-- [ ] Uçtan uca diyalog testi başarıyla tamamlanır.
+- [x] Uçtan uca diyalog testi başarıyla tamamlanır.
 **Dependencies:** Tasks 2, 3, 4, 5, 6
 **Files likely touched:**
 - `src/core/assistant.py`
 - `src/main.py`
+- `tests/test_assistant_controller.py`
 **Estimated scope:** Medium (2 files)
 
 ### Task 8: Polishing, CLI Startup & User Guide
 **Description:** `.env` kurulum rehberi, hata yakalama (mikrofon yok, API kotası, internet kesintisi), masaüstü başlatıcı ve `README.md` dokümantasyonu tamamlanır.
 **Acceptance criteria:**
-- [ ] Kullanıcı kolayca `.env` dosyasını oluşturup Gemini API anahtarını girebilir.
-- [ ] İnternet veya servis hatalarında widget kırmızı/uyarı animasyonuyla kullanıcıyı bilgilendirir, uygulama çökmez.
+- [x] Kullanıcı kolayca `.env` dosyasını oluşturup Gemini API anahtarını girebilir.
+- [x] İnternet veya servis hatalarında widget kırmızı/uyarı animasyonuyla kullanıcıyı bilgilendirir, uygulama çökmez.
 **Verification:**
-- [ ] `python -m src.main` ile asistan hatasız ayağa kalkar.
+- [x] `python -m src.main` ile asistan hatasız ayağa kalkar.
 **Dependencies:** Task 7
 **Files likely touched:**
 - `README.md`
 - `src/main.py`
+- `.gitignore`
 **Estimated scope:** Small (2 files)
 
 ## Final Checkpoint: Phase 1 MVP Complete
-- [ ] Tüm testler geçer (`pytest`).
-- [ ] Asistan kesintisiz sesli konuşma döngüsünü tamamlar.
-- [ ] Kullanıcı ile birlikte ilk canlı deneme gerçekleştirilir.
+- [x] Tüm testler geçer (`pytest`).
+- [x] Asistan kesintisiz sesli konuşma döngüsünü tamamlar.
+- [x] Kullanıcı ile birlikte ilk canlı deneme gerçekleştirilir.
