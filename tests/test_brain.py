@@ -16,7 +16,7 @@ def test_brain_response_model():
 
 def test_gemini_provider_mocked():
     """Gemini API çağrısının mock ile doğru format döndürdüğünü test eder."""
-    provider = GeminiProvider(api_key="fake_key", model="gemini-2.0-flash")
+    provider = GeminiProvider(api_key="fake_key", model="gemini-3.8-flash")
 
     mock_response = MagicMock()
     mock_response.text = "Gemini cevabı"
@@ -25,6 +25,25 @@ def test_gemini_provider_mocked():
         result = provider.generate_response("Merhaba")
         assert result.text == "Gemini cevabı"
         assert result.provider == "gemini"
+
+
+def test_gemini_provider_fallback_on_503():
+    """Model 503 (yüksek yoğunluk) hatası verdiğinde diğer modele geçmeli."""
+    provider = GeminiProvider(api_key="fake_key", model="gemini-3.8-flash")
+
+    mock_client = MagicMock()
+    # 1. model 503 fırlatır, 2. model başarılı yanıt döner
+    mock_resp = MagicMock()
+    mock_resp.text = "Yedek model cevabı"
+    mock_client.models.generate_content.side_effect = [
+        Exception("503 UNAVAILABLE. This model is currently experiencing high demand"),
+        mock_resp,
+    ]
+
+    with patch.object(provider, "_get_client", return_value=mock_client):
+        result = provider.generate_response("Merhaba")
+        assert result.text == "Yedek model cevabı"
+        assert mock_client.models.generate_content.call_count == 2
 
 
 def test_ollama_provider_mocked():

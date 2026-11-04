@@ -8,7 +8,7 @@ def test_default_config():
 
     settings = Settings(_env_file=None)
     assert settings.HOTKEY == "ctrl+space"
-    assert settings.GEMINI_MODEL == "gemini-2.0-flash"
+    assert settings.GEMINI_MODEL == "gemini-3.8-flash"
     assert settings.OLLAMA_BASE_URL == "http://localhost:11434"
     assert settings.VOICESTUDIO_BASE_URL == "http://localhost:3900"
     assert "tr-TR" in settings.FALLBACK_TTS_VOICE

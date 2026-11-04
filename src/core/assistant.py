@@ -131,10 +131,9 @@ class AssistantController(QObject):
             self.sig_state_changed.emit(
                 AssistantUIState.ERROR.value, str(e)[:40]
             )
-            # 3 saniye sonra hazır durumuna dön
-            QTimer.singleShot(
-                3000,
-                lambda: self.sig_state_changed.emit(
-                    AssistantUIState.IDLE.value, "Hazır"
-                ),
+            # 3 saniye hata durumunu gösterdikten sonra hazır durumuna dön
+            import time
+            time.sleep(3)
+            self.sig_state_changed.emit(
+                AssistantUIState.IDLE.value, "Hazır"
             )

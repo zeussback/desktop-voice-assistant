@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # Google Gemini API
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
 
     # Yerel LLM Fallback (Ollama)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
