@@ -54,10 +54,10 @@
 ### Task 3: Display Brightness & Web Browser Tools
 **Description:** Monitör parlaklığını kontrol eden `SystemBrightnessTool` (`screen_brightness_control`) ve varsayılan tarayıcıda URL açıp Google araması yapan `WebBrowserTool` araçlarını geliştirir.
 **Acceptance criteria:**
-- [ ] `SystemBrightnessTool` eylemleri: `set_brightness` (0-100), `change_brightness` (artır/azalt), `get_brightness`. Monitör desteklemiyorsa çökmek yerine kullanıcıya anlaşılır bilgi döner.
-- [ ] `WebBrowserTool` eylemleri: `open_url` (http/https doğrulamalı) ve `search_google` (arama terimlerini URL kodlamalı).
+- [x] `SystemBrightnessTool` eylemleri: `set_brightness` (0-100), `change_brightness` (artır/azalt), `get_brightness`. Monitör desteklemiyorsa çökmek yerine kullanıcıya anlaşılır bilgi döner.
+- [x] `WebBrowserTool` eylemleri: `open_url` (http/https doğrulamalı) ve `search_google` (arama terimlerini URL kodlamalı).
 **Verification:**
-- [ ] `pytest tests/test_os_control.py -k "brightness or browser"` testleri geçer.
+- [x] `pytest tests/test_os_control.py -k "brightness or browser"` testleri geçer.
 **Dependencies:** Task 1
 **Files likely touched:**
 - `src/tools/system_brightness.py`
@@ -69,8 +69,8 @@
 ---
 
 ## Checkpoint 1: Tool Registry & Core System Tools
-- [ ] `test_tools.py` ve `test_os_control.py` testleri geçer.
-- [ ] Ses, medya, parlaklık ve web araçları mock'larla doğrulanır.
+- [x] `test_tools.py` ve `test_os_control.py` testleri geçer.
+- [x] Ses, medya, parlaklık ve web araçları mock'larla doğrulanır.
 
 ---
 

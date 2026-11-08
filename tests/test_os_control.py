@@ -143,3 +143,140 @@ def test_media_control_invalid_action():
     res = tool.execute("unknown_media_action")
     assert res.success is False
     assert "Bilinmeyen" in res.message
+
+
+# ==========================================
+# SystemBrightnessTool Tests
+# ==========================================
+from src.tools.system_brightness import SystemBrightnessTool
+
+
+def test_system_brightness_declaration():
+    tool = SystemBrightnessTool()
+    decl = tool.get_declaration()
+    assert decl["name"] == "control_system_brightness"
+    assert "action" in decl["parameters"]["properties"]
+
+
+def test_system_brightness_set_volume():
+    tool = SystemBrightnessTool()
+    tool._set_brightness = MagicMock()
+
+    res = tool.execute("set_brightness", level=60)
+    assert res.success is True
+    assert "60" in res.message
+    tool._set_brightness.assert_called_once_with(60)
+
+
+def test_system_brightness_set_clamping():
+    tool = SystemBrightnessTool()
+    tool._set_brightness = MagicMock()
+
+    res = tool.execute("set_brightness", level=130)
+    assert res.success is True
+    assert "100" in res.message
+    tool._set_brightness.assert_called_once_with(100)
+
+
+def test_system_brightness_set_missing_level():
+    tool = SystemBrightnessTool()
+    res = tool.execute("set_brightness")
+    assert res.success is False
+    assert "seviye" in res.message
+
+
+def test_system_brightness_change():
+    tool = SystemBrightnessTool()
+    tool._get_current_brightness = MagicMock(return_value=50)
+    tool._set_brightness = MagicMock()
+
+    res = tool.execute("change_brightness", delta=-20)
+    assert res.success is True
+    assert "30" in res.message
+    tool._set_brightness.assert_called_once_with(30)
+
+
+def test_system_brightness_change_missing_delta():
+    tool = SystemBrightnessTool()
+    res = tool.execute("change_brightness")
+    assert res.success is False
+    assert "miktarını" in res.message
+
+
+def test_system_brightness_get():
+    tool = SystemBrightnessTool()
+    tool._get_current_brightness = MagicMock(return_value=85)
+
+    res = tool.execute("get_brightness")
+    assert res.success is True
+    assert "85" in res.message
+    assert res.data["brightness"] == 85
+
+
+def test_system_brightness_unsupported_hardware():
+    tool = SystemBrightnessTool()
+    tool._get_current_brightness = MagicMock(side_effect=RuntimeError("DDC/CI error"))
+
+    res = tool.execute("get_brightness")
+    assert res.success is False
+    assert "desteklemiyor" in res.message
+
+
+# ==========================================
+# WebBrowserTool Tests
+# ==========================================
+from src.tools.web_browser import WebBrowserTool
+
+
+def test_web_browser_declaration():
+    tool = WebBrowserTool()
+    decl = tool.get_declaration()
+    assert decl["name"] == "open_web_browser"
+    assert "action" in decl["parameters"]["properties"]
+
+
+@patch("webbrowser.open")
+def test_web_browser_open_url_with_protocol(mock_open):
+    tool = WebBrowserTool()
+    res = tool.execute("open_url", url="https://www.youtube.com")
+    assert res.success is True
+    assert "https://www.youtube.com" in res.message
+    mock_open.assert_called_once_with("https://www.youtube.com")
+
+
+@patch("webbrowser.open")
+def test_web_browser_open_url_prepends_https(mock_open):
+    tool = WebBrowserTool()
+    res = tool.execute("open_url", url="github.com")
+    assert res.success is True
+    mock_open.assert_called_once_with("https://github.com")
+
+
+def test_web_browser_open_url_missing():
+    tool = WebBrowserTool()
+    res = tool.execute("open_url")
+    assert res.success is False
+    assert "belirtmelisiniz" in res.message
+
+
+@patch("webbrowser.open")
+def test_web_browser_search_google(mock_open):
+    tool = WebBrowserTool()
+    res = tool.execute("search_google", query="yapay zeka haberleri")
+    assert res.success is True
+    assert "yapay zeka haberleri" in res.message
+    mock_open.assert_called_once_with("https://www.google.com/search?q=yapay+zeka+haberleri")
+
+
+def test_web_browser_search_google_missing():
+    tool = WebBrowserTool()
+    res = tool.execute("search_google")
+    assert res.success is False
+    assert "ifadesi" in res.message
+
+
+def test_web_browser_invalid_action():
+    tool = WebBrowserTool()
+    res = tool.execute("invalid_action")
+    assert res.success is False
+    assert "Bilinmeyen" in res.message
