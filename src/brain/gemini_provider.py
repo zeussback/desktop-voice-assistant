@@ -87,22 +87,42 @@ class GeminiProvider(BaseBrainProvider):
 
                 response = client.models.generate_content(**kwargs)
 
-                # Fonksiyon çağrısı (function call) kontrolü
+                # Fonksiyon çağrısı (function call) kontrolü (Çoklu / Parallel Tool Execution)
                 function_calls = getattr(response, "function_calls", None)
                 if function_calls and self.tool_registry:
-                    first_call = function_calls[0]
-                    tool_name = first_call.name
-                    tool_args = dict(first_call.args or {})
-                    logger.info(f"Gemini araç çağrısı talep etti: {tool_name}({tool_args})")
+                    results = []
+                    tool_names = []
+                    needs_conf = False
+                    conf_prompt = None
 
-                    tool_result = self.tool_registry.execute(tool_name, tool_args)
+                    for call in function_calls:
+                        tool_name = call.name
+                        tool_args = dict(call.args or {})
+                        tool_names.append(tool_name)
+                        logger.info(f"Gemini araç çağrısı talep etti: {tool_name}({tool_args})")
+
+                        res = self.tool_registry.execute(tool_name, tool_args)
+                        results.append(res)
+                        if res.needs_confirmation:
+                            needs_conf = True
+                            conf_prompt = res.confirmation_prompt
+
+                    combined_messages = " ".join([r.message for r in results if r.message])
+                    if len(results) == 1:
+                        tool_res_dict = results[0].model_dump()
+                    else:
+                        tool_res_dict = {
+                            "success": all(r.success for r in results),
+                            "results": [r.model_dump() for r in results],
+                        }
+
                     return BrainResponse(
-                        text=tool_result.message,
+                        text=combined_messages.strip(),
                         provider="gemini",
-                        tool_called=tool_name,
-                        tool_result=tool_result.model_dump(),
-                        needs_confirmation=tool_result.needs_confirmation,
-                        confirmation_prompt=tool_result.confirmation_prompt,
+                        tool_called=", ".join(tool_names),
+                        tool_result=tool_res_dict,
+                        needs_confirmation=needs_conf,
+                        confirmation_prompt=conf_prompt,
                     )
 
                 text = getattr(response, "text", "") or ""

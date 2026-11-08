@@ -142,6 +142,50 @@ def test_gemini_provider_executes_function_call():
         assert res.tool_result["success"] is True
 
 
+def test_gemini_provider_executes_multiple_parallel_function_calls():
+    """Gemini API'den birden fazla paralel araç çağrısı geldiğinde sırayla çalıştırmalı."""
+    from src.tools.registry import ToolRegistry
+    from src.tools.base import BaseTool, ToolResult
+
+    class ToolA(BaseTool):
+        name = "tool_a"
+        description = "Tool A"
+        def get_declaration(self): return {"name": self.name}
+        def execute(self, val=""): return ToolResult(success=True, message=f"A:{val}")
+
+    class ToolB(BaseTool):
+        name = "tool_b"
+        description = "Tool B"
+        def get_declaration(self): return {"name": self.name}
+        def execute(self, val=""): return ToolResult(success=True, message=f"B:{val}")
+
+    registry = ToolRegistry()
+    registry.register(ToolA())
+    registry.register(ToolB())
+
+    provider = GeminiProvider(api_key="fake_key", tool_registry=registry)
+
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    call1 = MagicMock()
+    call1.name = "tool_a"
+    call1.args = {"val": "1"}
+    call2 = MagicMock()
+    call2.name = "tool_b"
+    call2.args = {"val": "2"}
+    mock_resp.function_calls = [call1, call2]
+    mock_client.models.generate_content.return_value = mock_resp
+
+    with patch.object(provider, "_get_client", return_value=mock_client):
+        res = provider.generate_response("A ve B'yi çalıştır")
+        assert "tool_a" in res.tool_called
+        assert "tool_b" in res.tool_called
+        assert "A:1" in res.text
+        assert "B:2" in res.text
+        assert res.tool_result["success"] is True
+        assert len(res.tool_result["results"]) == 2
+
+
 def test_gemini_provider_handles_confirmation_tool():
     """Kritik araç çağrıldığında needs_confirmation ve prompt dönmeli."""
     from src.tools.registry import ToolRegistry

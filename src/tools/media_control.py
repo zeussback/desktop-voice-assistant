@@ -28,8 +28,10 @@ class MediaControlTool(BaseTool):
 
     name = "control_media"
     description = (
-        "Bilgisayarda çalan medyayı (müzik, video, Spotify, YouTube vb.) kontrol eder: "
-        "oynat/duraklat, sonraki parça, önceki parça veya durdur."
+        "Bilgisayarda çalan veya duraklatılmış medyayı (müzik, video, Spotify, YouTube vb.) kontrol eder. "
+        "Müziği başlatmak, çalmak, durdurmak, duraklatmak, devam ettirmek (play/pause), sonraki/önceki parçaya geçmek için bu aracı kullan. "
+        "ÖNEMLİ: Kullanıcı 'müziği başlat', 'müziği aç', 'müzik çal', 'şarkıyı aç', 'müziği durdur', 'müziği duraklat' dediğinde "
+        "uygulama açma aracı yerine MUTLAKA bu 'control_media' aracını (action='play_pause') kullanmalısın."
     )
     confirmation_policy = ConfirmationPolicy.IMMEDIATE
 

@@ -96,8 +96,10 @@ class AppControlTool(BaseTool):
 
     name = "control_application"
     description = (
-        "Bilgisayarda yüklü olan masaüstü uygulamalarını açar veya çalışan "
-        "uygulamaları kapatır (sonlandırır)."
+        "Bilgisayarda yüklü olan belirli bir masaüstü uygulamasını (örneğin 'Google Chrome', 'Discord', 'Not Defteri', 'Spotify') "
+        "adıyla açar veya çalışan programı kapatır. "
+        "DİKKAT: Kullanıcı yalnızca 'müzik aç', 'müziği başlat', 'müziği durdur' gibi genel medya komutları verdiğinde bu aracı DEĞİL, "
+        "'control_media' aracını kullan. Sadece kullanıcı açıkça bir uygulama açmak veya kapatmak istediğinde bu aracı kullan."
     )
     confirmation_policy = ConfirmationPolicy.IMMEDIATE
 
