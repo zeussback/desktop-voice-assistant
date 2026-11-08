@@ -53,8 +53,14 @@ def clean_repeated_efendim(text: str) -> str:
         new_text += text[last_idx:m.start()]
         last_idx = m.end()
     new_text += text[last_idx:]
+    # Noktalama öncesi boşlukları ve çift noktalamaları düzelt
     new_text = re.sub(r'\s+([,.\?!])', r'\1', new_text)
     new_text = re.sub(r'([,])\s*([.])', r'.', new_text)
+    new_text = re.sub(r'\s+', ' ', new_text).strip()
+    # Başta kalan gereksiz virgül veya noktalama işaretlerini temizle
+    new_text = new_text.lstrip(" ,;:.")
+    if new_text and new_text[0].islower():
+        new_text = new_text[0].upper() + new_text[1:]
     return new_text
 
 

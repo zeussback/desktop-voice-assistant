@@ -133,13 +133,17 @@ class AppControlTool(BaseTool):
 
     def _terminate_process(self, clean_name: str) -> int:
         """Find and terminate running processes matching the name. Returns count terminated."""
+        clean = clean_name.lower().strip()
+        if not clean:
+            return 0
         terminated_count = 0
         for proc in psutil.process_iter(['pid', 'name']):
             try:
                 pname = (proc.info.get('name') or '').lower()
-                # Check match against clean_name
-                # e.g. "spotify.exe", "chrome.exe", "code.exe"
-                if clean_name in pname or pname.startswith(clean_name):
+                base_pname = os.path.splitext(pname)[0]
+                # Tam isim eşleşmesi ("spotify" == "spotify" -> spotify.exe) veya en az 3 karakterli önek eşleşmesi
+                is_match = (base_pname == clean) or (len(clean) >= 3 and (base_pname.startswith(clean) or pname.startswith(clean)))
+                if is_match:
                     proc.terminate()
                     terminated_count += 1
             except (psutil.NoSuchProcess, psutil.AccessDenied):
