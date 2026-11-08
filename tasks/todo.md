@@ -13,121 +13,74 @@
 
 ---
 
-## Phase 2: OS Control & Tool Engine
+## Phase 2: OS Control & Tool Engine — COMPLETED ✅
+- [x] Task 1: Tool Engine Core (`BaseTool`, `ToolResult`, `ToolRegistry`)
+- [x] Task 2: System Audio & Media Control Tools
+- [x] Task 3: Display Brightness & Web Browser Tools
+- [x] Task 4: Application Control & Power Management Tools
+- [x] Task 5: Gemini Provider Tool Calling Loop & Function Execution
+- [x] Task 6: Assistant Controller Confirmation State Machine & End-to-End Orchestration
+- [x] Final Checkpoint: Phase 2 OS Control Complete (90 unit tests passing, commit `ffb4970`)
 
-### Task 1: Tool Engine Core (`BaseTool`, `ToolResult`, `ToolRegistry`)
-**Description:** Araçların tanımlanacağı `BaseTool` soyut sınıfını, standart `ToolResult` sonucunu ve araçları kaydedip Gemini Function Calling JSON şemalarına dönüştüren `ToolRegistry` merkezi motorunu oluşturur.
+---
+
+## Phase 3: Vision (Ekran Görme & İnceleme)
+
+### Task 1: Pillow Bağımlılığı & Bellek İçi Ekran Yakalama Motoru
+**Description:** `Pillow` kütüphanesini projeye ekler; birincil ekranı diske dokunmadan doğrudan RAM bellekte (`io.BytesIO`) JPEG formatında yakalayan, RGBA modunu RGB'ye dönüştüren ve 1920x1080 sınırına ölçeklendiren yardımcı fonksiyonu yazar.
 **Acceptance criteria:**
-- [x] `BaseTool` sınıfı `name`, `description`, `confirmation_policy`, `get_declaration()` ve `execute(**kwargs)` arayüzlerini içerir.
-- [x] `ToolResult` (Pydantic) başarı durumu (`success`), seslendirilecek mesaj (`message`), veri sözlüğü (`data`) ve teyit alanlarını (`needs_confirmation`, `confirmation_prompt`) barındırır.
-- [x] `ToolRegistry` araçları kaydeder (`register`), isim çakışmalarını önler, Gemini `types.FunctionDeclaration` uyumlu şema listesi üretir ve araçları çağırır (`execute`).
+- [x] `Pillow` paketi `requirements.txt` dosyasına eklenir.
+- [x] `capture_screen_bytes(max_width=1920, max_height=1080)` fonksiyonu geçerli JPEG baytları (`bytes`) döner.
+- [x] Görüntü diske dosya olarak asla yazılmaz (`os.path.exists` ile dosya oluşmadığı test edilir).
+- [x] 1920x1080'den büyük görüntüler orantılı olarak küçültülür.
 **Verification:**
-- [x] `pytest tests/test_tools.py` testleri başarıyla geçer.
+- [x] `pytest tests/test_vision.py -k "capture"` testleri başarıyla geçer.
 **Dependencies:** None
 **Files likely touched:**
+- `requirements.txt`
+- `src/tools/screen_inspection.py`
+- `tests/test_vision.py`
+**Estimated scope:** Small (2-3 files)
+
+---
+
+### Task 2: Screen Inspection Tool (`ScreenInspectionTool`) & Tool Registry Entegrasyonu
+**Description:** `BaseTool` sınıfından türetilen `ScreenInspectionTool` sınıfını oluşturur, Gemini multimodal API'si üzerinden ekranı analiz eden metodu uygular ve aracı `ToolRegistry` fabrikasına (`create_default_tool_registry`) kaydeder.
+**Acceptance criteria:**
+- [x] `ScreenInspectionTool`, `inspect_screen` adıyla ve Gemini yönlendirici açıklamasıyla tanımlanır.
+- [x] `execute(query=...)` metodu ekranı yakalayıp Gemini Vision modeliyle analiz eder ve `ToolResult(success=True, message=...)` döner.
+- [x] Ekran yakalama veya API hatası durumunda çökmez; `"Ekran görüntüsü alınamadı veya analiz edilemedi efendim."` şeklinde nazik hata mesajı döner.
+- [x] `create_default_tool_registry()` çağrıldığında `inspect_screen` aracı otomatik olarak kaydedilir.
+**Verification:**
+- [x] `pytest tests/test_vision.py -k "tool or registry"` testleri başarıyla geçer.
+**Dependencies:** Task 1
+**Files likely touched:**
+- `src/tools/screen_inspection.py`
 - `src/tools/__init__.py`
-- `src/tools/base.py`
-- `src/tools/registry.py`
-- `tests/test_tools.py`
-**Estimated scope:** Small (4 files)
+- `tests/test_vision.py`
+**Estimated scope:** Small (3 files)
 
 ---
 
-### Task 2: System Audio & Media Control Tools
-**Description:** Windows ana ses düzeyini okuma/ayarlama (`pycaw`) ve klavye sanal tuşlarıyla medya oynatma/durdurma (`ctypes` keybd_event) araçlarını geliştirir.
+### Task 3: Gemini Multimodal Entegrasyonu & Model Fallback Dayanıklılığı
+**Description:** `GeminiProvider` ve `ScreenInspectionTool` arasındaki multimodal veri akışını, sistem istemi ve TTS optimizasyonunu sağlar; geçici 429 veya sunucu hatalarında yedek modellere geçişi garanti altına alır.
 **Acceptance criteria:**
-- [x] `SystemAudioTool` eylemleri: `set_volume` (0-100 aralığında sınırlandırılmış), `change_volume` (artır/azalt), `mute` ve `unmute`.
-- [x] `MediaControlTool` eylemleri: `play_pause`, `next_track`, `prev_track`, `stop`.
-- [x] Ses ve medya işlemleri sonucunda Jarvis'in söyleyeceği doğal Türkçe mesajlar üretilir.
+- [x] Gemini Vision istemi yanıtı 1-3 cümle, kod ve madde imi içermeyen akıcı Türkçe ve tek bir *"efendim"* ile sınırlandırır.
+- [x] `GeminiProvider`, Gemini'ın `inspect_screen` fonksiyon çağrısını yakalayıp başarıyla çalıştırır.
+- [x] Fallback modelleri (`gemini-3.5-flash`, `gemini-2.5-flash` vb.) multimodal istekleri de destekleyecek şekilde çalışır.
 **Verification:**
-- [x] `pytest tests/test_os_control.py -k "audio or media"` testleri geçer.
-**Dependencies:** Task 1
+- [x] `pytest tests/test_vision.py` ve `pytest tests/test_brain.py` testleri başarıyla geçer.
+**Dependencies:** Tasks 1, 2
 **Files likely touched:**
-- `src/tools/system_audio.py`
-- `src/tools/media_control.py`
-- `tests/test_os_control.py`
-- `requirements.txt`
-**Estimated scope:** Small (3-4 files)
-
----
-
-### Task 3: Display Brightness & Web Browser Tools
-**Description:** Monitör parlaklığını kontrol eden `SystemBrightnessTool` (`screen_brightness_control`) ve varsayılan tarayıcıda URL açıp Google araması yapan `WebBrowserTool` araçlarını geliştirir.
-**Acceptance criteria:**
-- [x] `SystemBrightnessTool` eylemleri: `set_brightness` (0-100), `change_brightness` (artır/azalt), `get_brightness`. Monitör desteklemiyorsa çökmek yerine kullanıcıya anlaşılır bilgi döner.
-- [x] `WebBrowserTool` eylemleri: `open_url` (http/https doğrulamalı) ve `search_google` (arama terimlerini URL kodlamalı).
-**Verification:**
-- [x] `pytest tests/test_os_control.py -k "brightness or browser"` testleri geçer.
-**Dependencies:** Task 1
-**Files likely touched:**
-- `src/tools/system_brightness.py`
-- `src/tools/web_browser.py`
-- `tests/test_os_control.py`
-- `requirements.txt`
-**Estimated scope:** Small (3-4 files)
-
----
-
-## Checkpoint 1: Tool Registry & Core System Tools
-- [x] `test_tools.py` ve `test_os_control.py` testleri geçer.
-- [x] Ses, medya, parlaklık ve web araçları mock'larla doğrulanır.
-
----
-
-### Task 4: Application Control & Power Management Tools
-**Description:** Windows uygulamalarını açıp (`os.startfile` / Başlat Menüsü taraması) çalışan süreçleri kapatan (`psutil`) `AppControlTool` ile teyit gerektiren sistem kapatma/yeniden başlatma aracı `SystemPowerTool`'u geliştirir.
-**Acceptance criteria:**
-- [x] `AppControlTool`: Uygulama adı verildiğinde Başlat menüsü kısayollarında (`.lnk`) ve sistem yollarında arayıp başlatır. Kapatma istendiğinde `psutil` ile çalışan süreci bulup güvenle sonlandırır. Bulunamazsa kibar geri bildirim verir.
-- [x] `SystemPowerTool`: `shutdown`, `restart`, `sleep` komutlarını içerir ve `ConfirmationPolicy.REQUIRE_CONFIRMATION` işaretlidir; doğrudan çalıştırmak yerine `needs_confirmation=True` ve sesli teyit sorusu döner.
-**Verification:**
-- [x] `pytest tests/test_os_control.py -k "app or power"` testleri geçer.
-**Dependencies:** Task 1
-**Files likely touched:**
-- `src/tools/app_control.py`
-- `src/tools/system_power.py`
-- `tests/test_os_control.py`
-**Estimated scope:** Medium (3 files)
-
----
-
-### Task 5: Gemini Provider Tool Calling Loop & Function Execution
-**Description:** `GeminiProvider` sınıfını `ToolRegistry` ile entegre ederek Gemini'a tool tanımlarını gönderir, dönen `function_call` çağrılarını yakalar ve araç sonuçlarını modele veya kullanıcıya iletir.
-**Acceptance criteria:**
-- [x] `GeminiProvider.generate_response` metodu `tools` parametresini destekler.
-- [x] Gemini yanıtında `function_calls` varsa, ilgili araç `ToolRegistry` üzerinden çalıştırılır ve sonuç alınır.
-- [x] Araç sonucuna göre doğrudan seslendirilecek mesaj veya ikinci tur model çıktısı üretilir.
-**Verification:**
-- [x] `pytest tests/test_brain.py` testleri (mock function calling senaryoları dahil) geçer.
-**Dependencies:** Tasks 1, 2, 3, 4
-**Files likely touched:**
-- `src/brain/provider_base.py`
+- `src/tools/screen_inspection.py`
 - `src/brain/gemini_provider.py`
-- `tests/test_brain.py`
-**Estimated scope:** Medium (3 files)
+- `tests/test_vision.py`
+**Estimated scope:** Small (2-3 files)
 
 ---
 
-### Task 6: Assistant Controller Confirmation State Machine & End-to-End Orchestration
-**Description:** `AssistantController`'a `ToolRegistry`'yi bağlar; araç çalıştırma ve kritik eylemler için `AWAITING_CONFIRMATION` durumunu ekleyerek sesli onay döngüsünü tamamlar.
-**Acceptance criteria:**
-- [x] Araç `needs_confirmation=True` döndüğünde asistan `AWAITING_CONFIRMATION` durumuna geçer ve teyit sorusunu seslendirir.
-- [x] Kullanıcının bir sonraki cevabında onay kelimesi ("evet", "kapat", "onayla") varsa eylem icra edilir; ret kelimesi ("hayır", "iptal") varsa eylem iptal edilir.
-- [x] Normal araçlarda işlem tamamlandıktan sonra sonuç metni Piper TTS ile seslendirilir.
-- [x] Tüm eski (34) ve yeni testler (toplam 50+) hatasız geçer.
-**Verification:**
-- [x] `pytest tests/ -v` komutuyla tüm test süiti başarıyla tamamlanır.
-- [x] Canlı testte sesli olarak ses açma/kapama, uygulama açma ve web arama komutları doğrulanır.
-**Dependencies:** Tasks 1, 2, 3, 4, 5
-**Files likely touched:**
-- `src/core/assistant.py`
-- `src/main.py`
-- `tests/test_assistant_tools.py`
-- `tests/test_assistant_controller.py`
-**Estimated scope:** Medium (4 files)
-
----
-
-## Final Checkpoint: Phase 2 OS Control Complete
-- [x] Tüm testler yeşil (`pytest` -> 88 passed).
-- [x] Jarvis sesli komutla ses ayarlarını, medyayı, parlaklığı, uygulamaları ve web aramalarını başarıyla yönetir.
-- [x] Bilgisayarı kapatma gibi kritik komutlarda sesli teyit güvenle çalışır.
+## Checkpoint: Phase 3 Vision Complete & Full Regression
+- [x] `pytest tests/test_vision.py` testleri 100% geçer.
+- [x] `pytest tests/ -v` ile tüm test süiti (103 test) sıfır regresyon ile yeşil tamamlanır.
+- [x] Diskte hiçbir geçici ekran görüntüsü dosyası oluşmadığı doğrulanır.
+- [x] Asistan başlatıldığında *"Ekranda ne var?"* dendiğinde anında görme ve seslendirme döngüsü çalışır.

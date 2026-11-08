@@ -1,40 +1,43 @@
-# Implementation Plan: Phase 2 — OS Control & Tool Engine
+# Implementation Plan: Phase 3 — Vision (Ekran Görme & İnceleme)
 
 ## Overview
-Jarvis kişisel asistanına sesli komutlarla Windows işletim sistemini yönetme kabiliyeti kazandıracak modüler bir **Araç Motoru (Tool Engine / Function Calling)** entegrasyonu. Google Gemini modeli sesli komutları algılayarak uygun araçları (`SystemAudioTool`, `SystemBrightnessTool`, `MediaControlTool`, `AppControlTool`, `WebBrowserTool`, `SystemPowerTool`) tetikleyecek, Jarvis eylemi gerçekleştirip doğal Türkçe geri bildirim dönecektir.
+Jarvis sesli kişisel asistanına, kullanıcının sesli talebiyle bilgisayar ekranını görüp analiz edebilmesini sağlayan **Ekran İnceleme Aracı (`ScreenInspectionTool` / `inspect_screen`)** kazandırmak. Kullanıcı *"Ekranda ne görüyorsun?"*, *"Buradaki hatayı açıkla"*, *"Şu tablodaki toplam nedir?"* dediğinde; Gemini modeli Araç Motoru üzerinden `inspect_screen` fonksiyonunu çağıracak, ekran görüntüsü tamamen RAM bellekte yakalanıp Gemini Multimodal Vision API'sine iletilecek ve Jarvis 1-3 cümlelik özlü, sesli bir yanıt dönecektir.
 
 ## Architecture Decisions
-- **Modüler Araç Mimarisi (`BaseTool` & `ToolRegistry`):** Her yetenek bağımsız bir sınıf olarak tanımlanır. Gemini Function Calling JSON şemaları `BaseTool` üzerinden otomatik üretilir. Aşama 3'teki Vision (*inspect_screen*) yeteneği de bu motora tek bir araç olarak takılabilecektir.
-- **Hafif ve Sıfır Maliyetli Kütüphaneler:**
-  - Ses kontrolü için `pycaw` (Windows Core Audio API, pure Python/ctypes).
-  - Ekran parlaklığı için `screen_brightness_control`.
-  - Süreç ve uygulama yönetimi için `psutil` ve yerel Windows komutları.
-  - Medya tuşları için harici paket yüklemeden doğrudan `ctypes.windll.user32.keybd_event` (VK_MEDIA_PLAY_PAUSE vb.).
-- **Çift Kademeli Güvenlik ve Teyit:**
-  - *Immediate:* Normal eylemler (ses ayarı, uygulama açma/kapama, web arama) kullanıcıya sormadan anında icra edilir ve kısa sesli teyit verilir (*"Spotify açıldı efendim"*).
-  - *Require Confirmation:* Kritik eylemler (sistemi kapatma/yeniden başlatma) öncesi asistan `AWAITING_CONFIRMATION` durumuna geçerek sesli onay ister; bir sonraki konuşmada onay gelirse çalıştırır.
-- **Asenkron UI Güvenliği:** Tüm araç çalıştırma ve Windows API işlemleri arka plan QThread / Worker havuzunda yürütülür; PySide6 widget'ı hiçbir zaman donmaz.
+- **Modüler Araç Mimarisi ile Kusursuz Uyum (`BaseTool` & `ToolRegistry`):**
+  Ekran inceleme yeteneği, Aşama 2'de inşa ettiğimiz `BaseTool` sınıfından türetilen `ScreenInspectionTool` olarak sisteme dahil edilir. Bu sayede hem tek başına hem de birleşik komutlarda (örn: *"Müziği durdur ve ekrandaki hataya bak"*) paralel fonksiyon çağırma mekanizmasıyla doğal şekilde çalışır.
+- **Gizlilik & Sıfır Disk I/O (RAM Prensibi):**
+  Ekran görüntüleri kesinlikle yerel diske (`.jpg`, `.png`) yazılmaz. `Pillow` (`PIL.ImageGrab`) ile birincil ekrandan doğrudan yakalanıp bellek içi tamponda (`io.BytesIO`) JPEG olarak tutulur ve API çağrısı sonrası bellekten serbest bırakılır.
+- **Hafiflik ve Hızlı Yanıt (1080p Ölçekleme):**
+  2K veya 4K ekranlarda gereksiz token ve bant genişliği tüketimini önlemek, yanıt süresini minimumda tutmak için yakalanan görüntü en-boy oranı korunarak maksimum 1920x1080 çözünürlüğe ölçeklendirilir.
+- **Jarvis & Piper TTS Uyumlu Ses Formatı:**
+  Gemini Vision istemine (prompt) net talimat verilerek yanıtın markdown, kod bloku veya madde imi içermemesi; doğrudan seslendirmeye uygun, net ve en fazla 1-3 cümle olması ve tek bir *"efendim"* ile bitmesi sağlanır.
+- **Yedek Model Havuzu (Fallback Resiliency):**
+  Gemini Vision çağrısı, `GeminiProvider`'ın 9 modelli fallback havuzu (`gemini-3.5-flash`, `gemini-2.5-flash`, `gemini-flash-latest` vb.) üzerinden çalışır; kota (429) veya sunucu yoğunluğunda anında diğer modele geçilir.
+
+---
 
 ## Task List Summary
 
-### Phase 2: OS Control & Tool Engine
-- **Task 1: Tool Engine Core (`BaseTool`, `ToolResult`, `ToolRegistry`)** (Foundation)
-- **Task 2: System Audio & Media Control Tools** (Core Tool)
-- **Task 3: Display Brightness & Web Browser Tools** (Core Tool)
-- **Task 4: Application Control & Power Management Tools** (Core Tool)
-- **Task 5: Gemini Provider Tool Calling Loop & Function Execution** (Brain Integration)
-- **Task 6: Assistant Controller Confirmation State Machine & End-to-End Orchestration** (Orchestration & Verification)
+### Phase 3: Vision
+- **Task 1: Pillow Bağımlılığı & Bellek İçi Ekran Yakalama Motoru (`_capture_screen_bytes`)**
+- **Task 2: Screen Inspection Tool (`ScreenInspectionTool`) & Tool Registry Entegrasyonu**
+- **Task 3: Gemini Multimodal Vision Entegrasyonu & Hata/Fallback Dayanıklılığı**
+- **Checkpoint: Uçtan Uca Vision Doğrulaması & Sıfır Regresyon (Tüm Testler Yeşil)**
+
+---
 
 ## Risks and Mitigations
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Bazı harici monitörlerin WMI/DDC-CI parlaklık kontrolünü desteklememesi | Düşük | `screen_brightness_control` hata verdiğinde zarifçe yakalayıp kullanıcıya ekranın donanımsal parlaklık ayarına izin vermediğini sesli bildirme |
-| Uygulama adlarının farklı yollar altında olması (AppData vs Program Files) | Orta | Windows Başlat Menüsü (.lnk) kısayollarını, App Paths kayıt defterini ve yaygın sistem dizinlerini tarayan toleranslı arama mekanizması kurma |
-| Gemini API'nin bazen tool çağırmak yerine salt metin yanıt vermesi | Orta | `SYSTEM_PROMPT` içine net tool yönlendirmeleri ekleme ve fallback metin işleme |
-| Kritik sistem komutunda kullanıcının teyidi yanlışlıkla tetiklemesi | Yüksek | Kesin teyit kelimeleri ("evet", "kapat", "onaylıyorum") haricinde işlemi otomatik iptal etme |
+| Ekran kilitliyken veya kullanıcı oturumu kapalıyken `ImageGrab.grab()` çağrısının hata vermesi | Düşük | `ScreenInspectionTool` içinde istisnayı yakalayıp kullanıcıya *"Ekran görüntüsü alınamadı efendim"* şeklinde zarif sesli bilgi dönme |
+| 4K ekranlarda yüksek çözünürlüğün API süresini uzatması | Orta | `img.thumbnail((1920, 1080))` ile RAM içinde anında ölçeklendirme ve JPEG %85 optimize sıkıştırma |
+| Modelin kod veya markdown blokları üretip Piper TTS'in garip sesler çıkarması | Orta | Vision sistem talimatında seslendirilebilir düz Türkçe metin üretmeyi kesin kural olarak belirtme |
+| Gemini API geçici kota veya 429 hatası | Orta | Mevcut 9 modelli fallback listesiyle otomatik yedek modele geçiş |
+
+---
 
 ## Verification Checkpoints
-1. **Checkpoint 1 (Foundation):** `ToolRegistry` ve şema üretim birim testleri hatasız geçer (`pytest tests/test_tools.py`).
-2. **Checkpoint 2 (OS Tools):** Tüm sistem araçları (`pycaw`, `psutil`, `media`, `brightness`, `browser`) mock'larla ve yerel çağrılarla test edilir (`pytest tests/test_os_control.py`).
-3. **Checkpoint 3 (Brain & Confirmation):** Gemini tool calling döngüsü ve sesli onay durum makinesi test edilir (`pytest tests/test_assistant_tools.py`).
-4. **Final Checkpoint:** Tüm 34 mevcut test + yeni araç testleri (toplam ~50+ test) yeşil olarak tamamlanır ve canlı sesli deneme yapılır.
+1. **Checkpoint 1 (Capture):** Bellek içi ekran yakalama fonksiyonu diske dokunmadan geçerli JPEG baytları ve ölçeklenmiş boyut üretir (`tests/test_vision.py`).
+2. **Checkpoint 2 (Tool & Registry):** `inspect_screen` aracı `ToolRegistry`'ye kaydedilir, Gemini FunctionDeclaration şeması üretir ve mock Gemini yanıtıyla başarılı `ToolResult` döner.
+3. **Final Checkpoint (Regression):** Mevcut 90 test + yeni vision testleri (toplam 96+ test) hatasız geçer (`pytest tests/ -v`).

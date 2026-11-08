@@ -51,6 +51,7 @@ def test_create_default_tool_registry():
         "open_web_browser",
         "control_application",
         "control_system_power",
+        "inspect_screen",
     ]
     for exp in expected:
         assert exp in tools

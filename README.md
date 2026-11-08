@@ -78,4 +78,6 @@ Tüm modüller TDD (Test-Driven Development) döngüsüyle test kapsamına alın
 
 - [x] **1. Aşama (MVP):** Sesli İletişim Döngüsü + Glass-Liquid Durum Widget'ı + Hibrit Gemini/Ollama & Yerel Piper/EdgeTTS mimarisi + Jarvis Persona.
 - [x] **2. Aşama (İşletim Sistemi Kontrolü & Tool Engine):** Sesle bilgisayarda program açma/kapatma, ses ve medya kontrolleri, parlaklık ayarı, web araması ve güvenli fonksiyon çağırma (Function Calling / Tool Use) altyapısı + Sesli Teyit döngüsü.
-- [ ] **3. Aşama (Vision / Ekran Görme):** *"Ekranda ne görüyorsun?"* veya *"Buradaki hatayı açıkla"* dendiğinde anlık ekran görüntüsü alıp Gemini Multimodal ile analiz etme (Tool Engine üzerinden `inspect_screen` aracıyla tetiklenir).
+- [x] **3. Aşama (Vision / Ekran Görme):** *"Ekranda ne görüyorsun?"* veya *"Buradaki hatayı açıkla"* dendiğinde anlık ekran görüntüsü alıp Gemini Multimodal ile analiz etme (Tool Engine üzerinden `inspect_screen` aracıyla tetiklenir).
+- [ ] **4. Aşama (Kişisel Asistan & Sekreterlik):** Google Calendar, son tarihler (deadlines), Gmail gelen kutusu özetleme/temizleme ve her sabah proaktif sesli karşılama.
+- [ ] **5. Aşama (Mobil Köprü / Her Yerden Erişim):** Telegram botu ile telefonunuzdan Jarvis'e sesli mesaj atıp tüm masaüstü ve sekreterlik yeteneklerini dışarıdan yönetebilme.
