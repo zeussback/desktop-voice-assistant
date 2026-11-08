@@ -104,3 +104,64 @@ def test_hybrid_brain_fallback_on_error():
     assert result.text == "Yerel yedek yanıtı"
     assert result.provider == "ollama"
     mock_fallback.generate_response.assert_called_once_with("Test", None)
+
+
+def test_gemini_provider_executes_function_call():
+    """Gemini API'den function call geldiğinde ToolRegistry üzerinden çalıştırmalı."""
+    from src.tools.registry import ToolRegistry
+    from src.tools.base import BaseTool, ToolResult
+
+    class TestMockTool(BaseTool):
+        name = "mock_calc"
+        description = "Mock calculator"
+
+        def get_declaration(self):
+            return {"name": self.name, "description": self.description}
+
+        def execute(self, a=0, b=0):
+            return ToolResult(success=True, message=f"Sonuç: {a + b}")
+
+    registry = ToolRegistry()
+    registry.register(TestMockTool())
+
+    provider = GeminiProvider(api_key="fake_key", tool_registry=registry)
+
+    # Mock Gemini client response with function_calls
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_call = MagicMock()
+    mock_call.name = "mock_calc"
+    mock_call.args = {"a": 10, "b": 25}
+    mock_resp.function_calls = [mock_call]
+    mock_client.models.generate_content.return_value = mock_resp
+
+    with patch.object(provider, "_get_client", return_value=mock_client):
+        res = provider.generate_response("10 ile 25'i topla")
+        assert res.tool_called == "mock_calc"
+        assert res.text == "Sonuç: 35"
+        assert res.tool_result["success"] is True
+
+
+def test_gemini_provider_handles_confirmation_tool():
+    """Kritik araç çağrıldığında needs_confirmation ve prompt dönmeli."""
+    from src.tools.registry import ToolRegistry
+    from src.tools.system_power import SystemPowerTool
+
+    registry = ToolRegistry()
+    registry.register(SystemPowerTool())
+
+    provider = GeminiProvider(api_key="fake_key", tool_registry=registry)
+
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_call = MagicMock()
+    mock_call.name = "control_system_power"
+    mock_call.args = {"action": "shutdown"}
+    mock_resp.function_calls = [mock_call]
+    mock_client.models.generate_content.return_value = mock_resp
+
+    with patch.object(provider, "_get_client", return_value=mock_client):
+        res = provider.generate_response("Bilgisayarı kapat")
+        assert res.tool_called == "control_system_power"
+        assert res.needs_confirmation is True
+        assert "emin misiniz" in res.text

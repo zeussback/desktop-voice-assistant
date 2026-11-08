@@ -93,11 +93,11 @@
 ### Task 5: Gemini Provider Tool Calling Loop & Function Execution
 **Description:** `GeminiProvider` sınıfını `ToolRegistry` ile entegre ederek Gemini'a tool tanımlarını gönderir, dönen `function_call` çağrılarını yakalar ve araç sonuçlarını modele veya kullanıcıya iletir.
 **Acceptance criteria:**
-- [ ] `GeminiProvider.generate_response` metodu `tools` parametresini destekler.
-- [ ] Gemini yanıtında `function_calls` varsa, ilgili araç `ToolRegistry` üzerinden çalıştırılır ve sonuç alınır.
-- [ ] Araç sonucuna göre doğrudan seslendirilecek mesaj veya ikinci tur model çıktısı üretilir.
+- [x] `GeminiProvider.generate_response` metodu `tools` parametresini destekler.
+- [x] Gemini yanıtında `function_calls` varsa, ilgili araç `ToolRegistry` üzerinden çalıştırılır ve sonuç alınır.
+- [x] Araç sonucuna göre doğrudan seslendirilecek mesaj veya ikinci tur model çıktısı üretilir.
 **Verification:**
-- [ ] `pytest tests/test_brain.py` testleri (mock function calling senaryoları dahil) geçer.
+- [x] `pytest tests/test_brain.py` testleri (mock function calling senaryoları dahil) geçer.
 **Dependencies:** Tasks 1, 2, 3, 4
 **Files likely touched:**
 - `src/brain/provider_base.py`

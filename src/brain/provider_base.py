@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Any, Dict, Optional
 from pydantic import BaseModel
 
 
@@ -8,6 +8,10 @@ class BrainResponse(BaseModel):
 
     text: str
     provider: str
+    tool_called: Optional[str] = None
+    tool_result: Optional[Dict[str, Any]] = None
+    needs_confirmation: bool = False
+    confirmation_prompt: Optional[str] = None
 
 
 class BaseBrainProvider(ABC):
