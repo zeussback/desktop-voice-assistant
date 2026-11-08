@@ -36,11 +36,11 @@
 ### Task 2: System Audio & Media Control Tools
 **Description:** Windows ana ses düzeyini okuma/ayarlama (`pycaw`) ve klavye sanal tuşlarıyla medya oynatma/durdurma (`ctypes` keybd_event) araçlarını geliştirir.
 **Acceptance criteria:**
-- [ ] `SystemAudioTool` eylemleri: `set_volume` (0-100 aralığında sınırlandırılmış), `change_volume` (artır/azalt), `mute` ve `unmute`.
-- [ ] `MediaControlTool` eylemleri: `play_pause`, `next_track`, `prev_track`, `stop`.
-- [ ] Ses ve medya işlemleri sonucunda Jarvis'in söyleyeceği doğal Türkçe mesajlar üretilir.
+- [x] `SystemAudioTool` eylemleri: `set_volume` (0-100 aralığında sınırlandırılmış), `change_volume` (artır/azalt), `mute` ve `unmute`.
+- [x] `MediaControlTool` eylemleri: `play_pause`, `next_track`, `prev_track`, `stop`.
+- [x] Ses ve medya işlemleri sonucunda Jarvis'in söyleyeceği doğal Türkçe mesajlar üretilir.
 **Verification:**
-- [ ] `pytest tests/test_os_control.py -k "audio or media"` testleri geçer.
+- [x] `pytest tests/test_os_control.py -k "audio or media"` testleri geçer.
 **Dependencies:** Task 1
 **Files likely touched:**
 - `src/tools/system_audio.py`
