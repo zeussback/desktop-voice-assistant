@@ -11,6 +11,7 @@ from src.config import settings
 from src.core.assistant import AssistantController
 from src.core.audio_recorder import AudioRecorder
 from src.core.hotkey_listener import GlobalHotkeyListener
+from src.tools import create_default_tool_registry
 from src.ui.widget import GlassLiquidWidget
 from src.voice.audio_player import AudioPlayer
 from src.voice.edge_tts_client import EdgeTTSClient
@@ -34,10 +35,14 @@ def main():
     # 1. UI Widget'ı oluştur
     widget = GlassLiquidWidget()
 
-    # 2. Zeka Sağlayıcıları (Gemini Primary + Ollama Fallback)
+    # 2. Araç Motoru (Tool Engine)
+    tool_registry = create_default_tool_registry()
+
+    # 3. Zeka Sağlayıcıları (Gemini Primary + Ollama Fallback)
     gemini_brain = GeminiProvider(
         api_key=settings.GEMINI_API_KEY,
         model=settings.GEMINI_MODEL,
+        tool_registry=tool_registry,
     )
     ollama_brain = OllamaProvider(
         base_url=settings.OLLAMA_BASE_URL,
@@ -45,7 +50,7 @@ def main():
     )
     hybrid_brain = HybridBrain(primary=gemini_brain, fallback=ollama_brain)
 
-    # 3. Ses Sağlayıcıları (1: Piper Yerel Ultra Hızlı -> 2: Edge-TTS Son Çare)
+    # 4. Ses Sağlayıcıları (1: Piper Yerel Ultra Hızlı -> 2: Edge-TTS Son Çare)
     piper_tts = PiperTTSClient(
         model_path=settings.PIPER_MODEL_PATH,
         length_scale=settings.PIPER_LENGTH_SCALE,
@@ -54,23 +59,24 @@ def main():
     edge_tts = EdgeTTSClient(voice=settings.FALLBACK_TTS_VOICE)
     hybrid_voice = HybridTTS(providers=[piper_tts, edge_tts])
 
-    # 4. Ses Kayıt ve Oynatıcı
+    # 5. Ses Kayıt ve Oynatıcı
     recorder = AudioRecorder(
         sample_rate=settings.SAMPLE_RATE,
         channels=settings.CHANNELS,
     )
     player = AudioPlayer()
 
-    # 5. Ana Orkestratör
+    # 6. Ana Orkestratör
     controller = AssistantController(
         brain=hybrid_brain,
         voice=hybrid_voice,
         recorder=recorder,
         widget=widget,
         player=player,
+        tool_registry=tool_registry,
     )
 
-    # 6. Küresel Kısayol Dinleyici
+    # 7. Küresel Kısayol Dinleyici
     hotkey_listener = GlobalHotkeyListener(
         hotkey=settings.HOTKEY,
         on_toggle=controller.handle_toggle,

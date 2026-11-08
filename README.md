@@ -77,5 +77,5 @@ Tüm modüller TDD (Test-Driven Development) döngüsüyle test kapsamına alın
 ## 🗺️ Proje Yol Haritası (Roadmap)
 
 - [x] **1. Aşama (MVP):** Sesli İletişim Döngüsü + Glass-Liquid Durum Widget'ı + Hibrit Gemini/Ollama & Yerel Piper/EdgeTTS mimarisi + Jarvis Persona.
-- [ ] **2. Aşama (İşletim Sistemi Kontrolü & Tool Engine):** Sesle bilgisayarda program açma/kapatma, ses ve medya kontrolleri, pencere yönetimi, web araması ve güvenli fonksiyon çağırma (Function Calling / Tool Use) altyapısı.
-- [ ] **3. Aşama (Vision / Ekran Görme):** *"Ekranda ne görüyorsun?"* veya *"Buradaki hatayı açıkla"* dendiğinde anlık ekran görüntüsü alıp Gemini Multimodal ile analiz etme (Tool Engine üzerinden tetiklenir).
+- [x] **2. Aşama (İşletim Sistemi Kontrolü & Tool Engine):** Sesle bilgisayarda program açma/kapatma, ses ve medya kontrolleri, parlaklık ayarı, web araması ve güvenli fonksiyon çağırma (Function Calling / Tool Use) altyapısı + Sesli Teyit döngüsü.
+- [ ] **3. Aşama (Vision / Ekran Görme):** *"Ekranda ne görüyorsun?"* veya *"Buradaki hatayı açıkla"* dendiğinde anlık ekran görüntüsü alıp Gemini Multimodal ile analiz etme (Tool Engine üzerinden `inspect_screen` aracıyla tetiklenir).

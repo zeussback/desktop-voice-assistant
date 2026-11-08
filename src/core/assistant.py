@@ -1,12 +1,15 @@
+"""Assistant state machine and orchestrator coordinating Brain, Voice, UI, and Tools."""
+
 import logging
 import re
 import threading
-from typing import Optional
+from typing import Any, Dict, Optional
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
 from src.brain.provider_base import BaseBrainProvider
 from src.core.audio_recorder import AudioRecorder
+from src.tools.registry import ToolRegistry
 from src.ui.widget import AssistantUIState, GlassLiquidWidget
 from src.voice.audio_player import AudioPlayer
 from src.voice.tts_base import BaseTTSClient
@@ -20,6 +23,10 @@ Robotik, soğuk ya da kalıplaşmış yapay zeka klişelerinden (örneğin "Ben 
 Karşında bir makine değil; zeki, canlı, sıcakkanlı, hazırcevap ve esprili bir insan varmış hissini ver.
 Yanıtların sesli olarak okunacağı için akıcı, doğal ve özlü (genellikle 1-2 akıcı cümle) olsun; gereksiz uzun paragraflar kurma.
 Markdown yıldızları (*), başlıkları (#) veya karmaşık listelemeler yerine konuşma diline uygun akıcı cümleler kur.
+
+BİLGİSAYAR KONTROLÜ VE ARAÇ KULLANIMI:
+Sistem ayarları (ses, parlaklık, medya), uygulama açma/kapama, web sitelerini açma veya Google aramaları için sana sağlanan araçları (tools) kullan.
+Araç çağrısı yaptığında doğrudan amaca odaklan.
 
 ÖNEMLİ FORMAT KURALLARI:
 1. ASLA yanıtına ses zaman damgası (örneğin 00:01, 00:03, 00:06 gibi süreler) veya altyazı zaman kodları ekleme. Yalnızca doğrudan konuşma diline uygun doğal metin üret.
@@ -47,7 +54,7 @@ def sanitize_speech_text(text: str) -> str:
 
 
 class AssistantController(QObject):
-    """Asistanın tüm bileşenlerini (Zeka, Ses, UI, Kısayol) koordine eden ana durum yöneticisi."""
+    """Asistanın tüm bileşenlerini (Zeka, Ses, UI, Araçlar, Kısayol) koordine eden ana durum yöneticisi."""
 
     sig_state_changed = Signal(str, str)
     sig_audio_level = Signal(float)
@@ -60,6 +67,7 @@ class AssistantController(QObject):
         recorder: AudioRecorder,
         widget: GlassLiquidWidget,
         player: Optional[AudioPlayer] = None,
+        tool_registry: Optional[ToolRegistry] = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -68,8 +76,10 @@ class AssistantController(QObject):
         self.recorder = recorder
         self.widget = widget
         self.player = player or AudioPlayer()
+        self.tool_registry = tool_registry
 
         self.current_state = AssistantUIState.IDLE
+        self.pending_confirmation: Optional[Dict[str, Any]] = None
 
         # Sinyalleri arayüze ve çıkış yönetimine bağla (Thread-Safe)
         self.sig_state_changed.connect(self._on_state_changed_ui)
@@ -138,13 +148,55 @@ class AssistantController(QObject):
         try:
             logger.info("Ses verisi işleniyor...")
 
+            active_prompt = SYSTEM_PROMPT
+            if self.pending_confirmation:
+                conf_prompt = self.pending_confirmation.get("prompt", "")
+                active_prompt += (
+                    f"\n\n[DURUM: Kullanıcıya az önce şu teyit sorusunu sordun: '{conf_prompt}'. "
+                    f"Kullanıcının yanıtını dinle. Eğer onaylıyorsa (evet, yap, kapat, onaylıyorum vb.), teyit ettiğini belirt. "
+                    f"Eğer reddediyorsa (hayır, iptal, vazgeç vb.), işlemi iptal ettiğini kibarca söyle.]"
+                )
+
             # 1. Zeka katmanından yanıt al
             response = self.brain.generate_response(
-                prompt=SYSTEM_PROMPT,
+                prompt=active_prompt,
                 audio_bytes=audio_bytes if len(audio_bytes) > 100 else None,
             )
 
-            raw_response_text = response.text.strip()
+            # Eğer daha önce onay bekleyen bir işlem varsa ve bu turda yanıt geldiyse
+            if self.pending_confirmation:
+                resp_lower = response.text.lower()
+                is_cancelled = any(w in resp_lower for w in ["iptal", "vazgeç", "hayır", "yapma", "istemiyorum"])
+                if is_cancelled:
+                    logger.info("Kullanıcı işlemi iptal etti.")
+                    self.pending_confirmation = None
+                    raw_response_text = "İşlemi iptal ettim efendim."
+                else:
+                    # Onaylandı -> bekleyen aracı confirmed=True ile çalıştır
+                    pending = self.pending_confirmation
+                    self.pending_confirmation = None
+                    tool_name = pending["tool_name"]
+                    tool_args = pending.get("args", {})
+                    logger.info(f"Onaylanan araç çalıştırılıyor: {tool_name}({tool_args})")
+                    if self.tool_registry:
+                        exec_res = self.tool_registry.execute(tool_name, tool_args, confirmed=True)
+                        raw_response_text = exec_res.message
+                    else:
+                        raw_response_text = "İşlem onaylandı efendim."
+
+            elif response.needs_confirmation:
+                # Yeni bir teyit gerektiren araç tetiklendi
+                logger.info(f"Araç teyit bekliyor: {response.tool_called}")
+                self.pending_confirmation = {
+                    "tool_name": response.tool_called,
+                    "args": (response.tool_result or {}).get("data", {}).get("pending_args", {}),
+                    "prompt": response.confirmation_prompt or response.text,
+                }
+                raw_response_text = response.text.strip()
+
+            else:
+                raw_response_text = response.text.strip()
+
             if not raw_response_text:
                 raw_response_text = "Sizi tam duyamadım, lütfen tekrar söyler misiniz?"
 
@@ -154,7 +206,6 @@ class AssistantController(QObject):
                 cleaned_resp = raw_response_text.replace("[EXIT]", "").strip()
             else:
                 cleaned_resp = raw_response_text
-                # Yedek kontrol: belirgin Türkçe kapanma yanıtları
                 lower_resp = cleaned_resp.lower()
                 if any(w in lower_resp for w in ["asistan kapatılıyor", "kendine iyi bak", "görüşmek üzere", "hoşça kal", "kendinize iyi bakın", "bay bay"]):
                     if any(cmd in lower_resp for cmd in ["kapatılıyor", "kapatıyorum", "görüşürüz", "hoşça kal", "kendinize iyi bakın", "bay bay"]):
@@ -163,7 +214,7 @@ class AssistantController(QObject):
             # Yanıt metninden ses zaman damgalarını (00:03 vb.) ve markdown karakterlerini temizle
             response_text = sanitize_speech_text(cleaned_resp)
             if not response_text:
-                response_text = "Sizi dinliyorum, nasıl yardımcı olabilirim?"
+                response_text = "Sizi dinliyorum efendim, nasıl yardımcı olabilirim?"
 
             logger.info(f"Yanıt ({response.provider}): {response_text} (Çıkış İsteği: {is_exit_request})")
 

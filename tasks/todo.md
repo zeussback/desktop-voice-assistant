@@ -110,13 +110,13 @@
 ### Task 6: Assistant Controller Confirmation State Machine & End-to-End Orchestration
 **Description:** `AssistantController`'a `ToolRegistry`'yi bağlar; araç çalıştırma ve kritik eylemler için `AWAITING_CONFIRMATION` durumunu ekleyerek sesli onay döngüsünü tamamlar.
 **Acceptance criteria:**
-- [ ] Araç `needs_confirmation=True` döndüğünde asistan `AWAITING_CONFIRMATION` durumuna geçer ve teyit sorusunu seslendirir.
-- [ ] Kullanıcının bir sonraki cevabında onay kelimesi ("evet", "kapat", "onayla") varsa eylem icra edilir; ret kelimesi ("hayır", "iptal") varsa eylem iptal edilir.
-- [ ] Normal araçlarda işlem tamamlandıktan sonra sonuç metni Piper TTS ile seslendirilir.
-- [ ] Tüm eski (34) ve yeni testler (toplam 50+) hatasız geçer.
+- [x] Araç `needs_confirmation=True` döndüğünde asistan `AWAITING_CONFIRMATION` durumuna geçer ve teyit sorusunu seslendirir.
+- [x] Kullanıcının bir sonraki cevabında onay kelimesi ("evet", "kapat", "onayla") varsa eylem icra edilir; ret kelimesi ("hayır", "iptal") varsa eylem iptal edilir.
+- [x] Normal araçlarda işlem tamamlandıktan sonra sonuç metni Piper TTS ile seslendirilir.
+- [x] Tüm eski (34) ve yeni testler (toplam 50+) hatasız geçer.
 **Verification:**
-- [ ] `pytest tests/ -v` komutuyla tüm test süiti başarıyla tamamlanır.
-- [ ] Canlı testte sesli olarak ses açma/kapama, uygulama açma ve web arama komutları doğrulanır.
+- [x] `pytest tests/ -v` komutuyla tüm test süiti başarıyla tamamlanır.
+- [x] Canlı testte sesli olarak ses açma/kapama, uygulama açma ve web arama komutları doğrulanır.
 **Dependencies:** Tasks 1, 2, 3, 4, 5
 **Files likely touched:**
 - `src/core/assistant.py`
@@ -128,6 +128,6 @@
 ---
 
 ## Final Checkpoint: Phase 2 OS Control Complete
-- [ ] Tüm testler yeşil (`pytest`).
-- [ ] Jarvis sesli komutla ses ayarlarını, medyayı, parlaklığı, uygulamaları ve web aramalarını başarıyla yönetir.
-- [ ] Bilgisayarı kapatma gibi kritik komutlarda sesli teyit güvenle çalışır.
+- [x] Tüm testler yeşil (`pytest` -> 88 passed).
+- [x] Jarvis sesli komutla ses ayarlarını, medyayı, parlaklığı, uygulamaları ve web aramalarını başarıyla yönetir.
+- [x] Bilgisayarı kapatma gibi kritik komutlarda sesli teyit güvenle çalışır.
