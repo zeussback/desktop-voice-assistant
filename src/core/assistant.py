@@ -30,12 +30,32 @@ Sistem ayarları (ses, parlaklık, medya), uygulama açma/kapama, web sitelerini
 2. Çoklu Komutlar: Kullanıcı tek cümlede birden fazla işlem istediğinde (örneğin 'sesi yüzde 80 yap ve youtube'da arama yap'), her iki aracı da arka arkaya çağır (parallel function call).
 3. Araç çağrısı yaptığında doğrudan amaca odaklan ve eylemler bittikten sonra kısa ve doğal bir sesli özet sun.
 
+3. ÜSLUP VE HİTAP KURALI:
+- 'efendim' hitabını yanıtında yalnızca BİR KEZ (tercihen cümlenin sonunda veya başında) kullan. Asla her cümlenin sonuna papağan gibi arka arkaya 'efendim' ekleme (örneğin 'Yaptım efendim. Açtım efendim. Başka isteğiniz var mı efendim?' ŞEKLİNDE TEKRAR ETME).
+- Birden fazla eylemi özetlerken cümleleri ayrı ayrı kurmak yerine 've' bağlacıyla birbirine bağla (örneğin: 'Sesi yüzde 80 yaptım ve YouTube'u açtım efendim').
+
 ÖNEMLİ FORMAT KURALLARI:
 1. ASLA yanıtına ses zaman damgası (örneğin 00:01, 00:03, 00:06 gibi süreler) veya altyazı zaman kodları ekleme. Yalnızca doğrudan konuşma diline uygun doğal metin üret.
 2. UYGULAMADAN ÇIKIŞ: Kullanıcı uygulamayı veya seni kapatmak, çıkış yapmak ya da vedalaşmak istediğinde (örneğin "kapat", "çık", "uygulamayı kapat", "asistanı kapat", "çıkış yap", "görüşürüz", "hoşça kal", "kendine iyi bak", "bay bay" vb.):
 Samimi ve zarif bir veda cümlesi söyle (örneğin: "Görüşmek üzere efendim, kendinize çok iyi bakın!") ve yanıtının EN SONUNA mutlaka [EXIT] etiketini ekle.
 Örnek: "Görüşmek üzere efendim, kendinize çok iyi bakın! [EXIT]"
 """
+
+
+def clean_repeated_efendim(text: str) -> str:
+    """Metin içinde birden fazla geçen 'efendim' kelimesini temizleyip yalnızca sonuncuyu bırakır."""
+    matches = list(re.finditer(r'\befendim\b', text, flags=re.IGNORECASE))
+    if len(matches) <= 1:
+        return text
+    new_text = ""
+    last_idx = 0
+    for m in matches[:-1]:
+        new_text += text[last_idx:m.start()]
+        last_idx = m.end()
+    new_text += text[last_idx:]
+    new_text = re.sub(r'\s+([,.\?!])', r'\1', new_text)
+    new_text = re.sub(r'([,])\s*([.])', r'.', new_text)
+    return new_text
 
 
 def sanitize_speech_text(text: str) -> str:
@@ -49,6 +69,8 @@ def sanitize_speech_text(text: str) -> str:
     text = re.sub(r'[\[\(]\s*\d{1,2}:\d{2}\s*[\]\)]', ' ', text)
     # Markdown formatlama yıldızlarını ve başlık işaretlerini temizle (*, **, #, `)
     text = re.sub(r'[\*\_#`]', '', text)
+    # Tekrarlanan 'efendim' hitaplarını temizle (yalnızca 1 adet bırak)
+    text = clean_repeated_efendim(text)
     # Çift boşlukları ve noktalama öncesi boşlukları düzelt
     text = re.sub(r'\s+', ' ', text)
     text = re.sub(r'\s+([,.\?!])', r'\1', text)

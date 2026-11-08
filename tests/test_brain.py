@@ -182,6 +182,8 @@ def test_gemini_provider_executes_multiple_parallel_function_calls():
         assert "tool_b" in res.tool_called
         assert "A:1" in res.text
         assert "B:2" in res.text
+        assert " ve " in res.text
+        assert res.text.endswith("efendim.")
         assert res.tool_result["success"] is True
         assert len(res.tool_result["results"]) == 2
 

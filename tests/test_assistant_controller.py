@@ -150,3 +150,11 @@ def test_sanitize_speech_text_removes_timestamps_and_markdown():
     assert "olabilirim?" in cleaned
 
 
+def test_sanitize_speech_text_removes_repeated_efendim():
+    """Arka arkaya tekrarlanan 'efendim' hitaplarını teke indirdiğini test eder."""
+    raw = "Ses düzeyi %80 olarak ayarlandı efendim. Spotify açıldı efendim."
+    cleaned = sanitize_speech_text(raw)
+    assert cleaned.count("efendim") == 1
+    assert "Spotify açıldı efendim." in cleaned
+
+

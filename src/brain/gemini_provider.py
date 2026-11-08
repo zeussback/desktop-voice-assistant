@@ -1,11 +1,41 @@
 """Google Gemini API Provider with tool calling, timeout handling, and model fallback."""
 
 import logging
+import re
 from typing import Any, Dict, List, Optional
 from src.brain.provider_base import BaseBrainProvider, BrainResponse
 from src.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
+
+
+def format_combined_tool_messages(messages: List[str]) -> str:
+    """Birden fazla aracın yanıtını 've' bağlacıyla bağlayıp tek bir 'efendim' ile bitiren akıcı cümle oluşturur."""
+    valid_msgs = [m.strip() for m in messages if m and m.strip()]
+    if not valid_msgs:
+        return ""
+    if len(valid_msgs) == 1:
+        return valid_msgs[0]
+
+    cleaned_clauses = []
+    for msg in valid_msgs:
+        # Cümle içindeki tüm 'efendim' kelimelerini temizle
+        c = re.sub(r'\befendim\b', '', msg, flags=re.IGNORECASE)
+        # Sondaki ve baştaki noktalama/boşlukları temizle
+        c = c.strip(" .,;!?")
+        c = re.sub(r'\s+', ' ', c).strip()
+        if c:
+            cleaned_clauses.append(c)
+
+    if not cleaned_clauses:
+        return "İşlemler tamamlandı efendim."
+    if len(cleaned_clauses) == 1:
+        return f"{cleaned_clauses[0]} efendim."
+    if len(cleaned_clauses) == 2:
+        return f"{cleaned_clauses[0]} ve {cleaned_clauses[1]} efendim."
+
+    all_but_last = ", ".join(cleaned_clauses[:-1])
+    return f"{all_but_last} ve {cleaned_clauses[-1]} efendim."
 
 
 class GeminiProvider(BaseBrainProvider):
@@ -107,7 +137,7 @@ class GeminiProvider(BaseBrainProvider):
                             needs_conf = True
                             conf_prompt = res.confirmation_prompt
 
-                    combined_messages = " ".join([r.message for r in results if r.message])
+                    combined_messages = format_combined_tool_messages([r.message for r in results if r.message])
                     if len(results) == 1:
                         tool_res_dict = results[0].model_dump()
                     else:
