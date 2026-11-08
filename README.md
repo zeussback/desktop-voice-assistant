@@ -20,8 +20,8 @@ Windows üzerinde çalışan; bas-konuş/toggle kısayolu (`Ctrl + Space`) ile t
   * **Yedek (Fallback / Offline):** Bilgisayarı kasmayan hafif yerel LLM desteği (Ollama üzerinden `qwen2.5:3b` veya `llama3.2:3b`).
 
 * **🔊 Doğal Türkçe Ses Motoru (TTS):**
-  * **Birincil (Primary):** [debpalash/VoiceStudio](https://github.com/debpalash/VoiceStudio) yerel API (`http://localhost:3900`) entegrasyonu (OmniVoice / Kokoro gibi insansı modeller).
-  * **Yedek (Fallback):** Microsoft Edge Neural TTS (`edge-tts` ile sıfır kurulumlu, akıcı Türkçe Ahmet/Emel sesleri).
+  * **Birincil (Yerel & Ultra Hızlı):** **Piper TTS** — Tamamen yerel, ~60 MB, **0.2 saniyede** anında konuşan doğal Türkçe model (`tr_TR-fahrettin-medium`).
+  * **Yedek (Son Çare):** Microsoft Edge Neural TTS (`edge-tts` ile çevrimiçi yedek).
 
 ---
 
@@ -76,6 +76,6 @@ Tüm modüller TDD (Test-Driven Development) döngüsüyle test kapsamına alın
 
 ## 🗺️ Proje Yol Haritası (Roadmap)
 
-- [x] **1. Aşama (MVP):** Sesli İletişim Döngüsü + Glass-Liquid Durum Widget'ı + Hibrit Gemini/Ollama & VoiceStudio/EdgeTTS mimarisi.
+- [x] **1. Aşama (MVP):** Sesli İletişim Döngüsü + Glass-Liquid Durum Widget'ı + Hibrit Gemini/Ollama & Yerel Piper/EdgeTTS mimarisi.
 - [ ] **2. Aşama (Vision):** *"Ekranda gösterdiğim şey ne?"* dediğinizde anlık ekran görüntüsü alıp Gemini Multimodal ile analiz etme.
 - [ ] **3. Aşama (Sistem Erişimi & Otomasyon):** Sesle bilgisayarda program açma, dosya arama, web araması yapma ve komut çalıştırma yetenekleri.

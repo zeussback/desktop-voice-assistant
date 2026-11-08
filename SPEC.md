@@ -2,7 +2,7 @@
 
 ## Objective
 Windows işletim sisteminde çalışan, bas-konuş kısayoluyla tetiklenen, ekranın üst kısmında animasyonlu "glass-liquid" (buzlu cam / akışkan) tarzında modern bir durum göstergesi sunan kişisel yapay zeka sesli asistanı. 
-Sıfır maliyet ve yüksek akıcılık için birincil olarak ücretsiz Google Gemini API'sini kullanır; kota aşımı veya çevrimdışı senaryolar için bilgisayarı yormayan yerel Ollama (Qwen/Llama) desteği sunar. Ses çıkışı için yerel VoiceStudio motorunu (OmniVoice/Kokoro) hedefler ve yedek olarak edge-tts barındırır.
+Sıfır maliyet ve yüksek akıcılık için birincil olarak ücretsiz Google Gemini API'sini kullanır; kota aşımı veya çevrimdışı senaryolar için bilgisayarı yormayan yerel Ollama (Qwen/Llama) desteği sunar. Ses çıkışı için yerel ve ultra hızlı Piper TTS motorunu hedefler ve yedek olarak edge-tts barındırır.
 
 ## Tech Stack
 - **Language / Runtime:** Python 3.11+
@@ -13,8 +13,8 @@ Sıfır maliyet ve yüksek akıcılık için birincil olarak ücretsiz Google Ge
   - *Primary:* Google Gemini API (`google-genai` / `google-generativeai`) — Kullanıcının Google AI Pro avantajıyla doğrudan Türkçe ses/metin multimodal desteği (yüksek kotalar, ultra düşük gecikme)
   - *Fallback / Local LLM:* `ollama` Python client (yerel `qwen2.5:3b` veya `llama3.2:3b`) + hafif yerel STT (`faster-whisper` base/tiny)
 - **Text-to-Speech (TTS):**
-  - *Primary:* `VoiceStudio API` (`http://localhost:3900`) — Doğal, insansı yerel ses
-  - *Fallback:* `edge-tts` (VoiceStudio kapalıysa veya çalışmıyorsa otomatik devreye girer)
+  - *Primary:* `Piper TTS` (Yerel, ~60 MB, 0.2 saniyede çalışan doğal Türkçe `tr_TR-fahrettin-medium`)
+  - *Fallback:* `edge-tts` (Son çare olarak devreye giren çevrimiçi yedek)
 - **Configuration & Storage:** `pydantic-settings`, `.env`, JSON/YAML
 
 ## Commands

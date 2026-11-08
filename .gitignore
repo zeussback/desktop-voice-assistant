@@ -9,8 +9,16 @@ __pycache__/
 *$py.class
 *.pytest_cache/
 
+# Models cache
+models/
+*.onnx
+*.onnx.json
+
 # Environment Variables & Secrets
 .env
+
+# Graphify
+graphify-out/
 
 # OS / IDE
 .vscode/

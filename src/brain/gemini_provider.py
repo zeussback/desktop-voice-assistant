@@ -6,13 +6,24 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiProvider(BaseBrainProvider):
-    """Google Gemini API sağlayıcısı (Otomatik yoğunluk/503 yedek model destekli)."""
+    """Google Gemini API sağlayıcısı (Otomatik zaman aşımı ve yedek model destekli)."""
 
-    FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash"]
+    FALLBACK_MODELS = [
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.6-flash",
+        "gemini-3.8-flash",
+    ]
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-3.8-flash"):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "gemini-3.5-flash",
+        timeout_ms: int = 12000,
+    ):
         self.api_key = api_key
         self.model = model
+        self.timeout_ms = timeout_ms
         self._client = None
 
     def _get_client(self):
@@ -20,8 +31,12 @@ class GeminiProvider(BaseBrainProvider):
             if not self.api_key:
                 raise ValueError("GEMINI_API_KEY tanımlanmamış!")
             from google import genai
+            from google.genai import types
 
-            self._client = genai.Client(api_key=self.api_key)
+            self._client = genai.Client(
+                api_key=self.api_key,
+                http_options=types.HttpOptions(timeout=self.timeout_ms),
+            )
         return self._client
 
     def _call_api(self, prompt: str, audio_bytes: Optional[bytes] = None) -> str:
@@ -36,7 +51,7 @@ class GeminiProvider(BaseBrainProvider):
             )
         contents.append(prompt)
 
-        # Denenecek modeller listesi: Seçilen model başa, diğer alternatifler arkaya
+        # Denenecek modeller listesi: Seçilen model başa, alternatifler arkaya
         models_to_try: List[str] = [self.model]
         for m in self.FALLBACK_MODELS:
             if m not in models_to_try:
@@ -54,10 +69,24 @@ class GeminiProvider(BaseBrainProvider):
             except Exception as e:
                 err_str = str(e).lower()
                 last_error = e
-                # 503 (yoğunluk), 429 (oran sınırı) veya geçici hatalarda diğer modele geç
-                if "503" in err_str or "unavailable" in err_str or "high demand" in err_str or "temporary" in err_str:
+                # 503, 504, 429, timeout, deadline_exceeded veya geçici sunucu yoğunluklarında diğer modele geç
+                is_transient = any(
+                    err_code in err_str
+                    for err_code in [
+                        "503",
+                        "504",
+                        "429",
+                        "timeout",
+                        "deadline",
+                        "unavailable",
+                        "high demand",
+                        "temporary",
+                        "overloaded",
+                    ]
+                )
+                if is_transient:
                     logger.warning(
-                        f"Model ({candidate_model}) yoğunlukta (503). Alternatif modele geçiliyor..."
+                        f"Model ({candidate_model}) yanıt vermedi veya gecikti ({e}). Bir sonraki modele geçiliyor..."
                     )
                     continue
                 else:

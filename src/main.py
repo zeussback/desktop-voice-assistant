@@ -1,4 +1,5 @@
 import logging
+import signal
 import sys
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
@@ -10,11 +11,11 @@ from src.config import settings
 from src.core.assistant import AssistantController
 from src.core.audio_recorder import AudioRecorder
 from src.core.hotkey_listener import GlobalHotkeyListener
-from src.ui.widget import AssistantUIState, GlassLiquidWidget
+from src.ui.widget import GlassLiquidWidget
 from src.voice.audio_player import AudioPlayer
 from src.voice.edge_tts_client import EdgeTTSClient
 from src.voice.hybrid_tts import HybridTTS
-from src.voice.voicestudio_client import VoiceStudioClient
+from src.voice.piper_client import PiperTTSClient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,13 +45,14 @@ def main():
     )
     hybrid_brain = HybridBrain(primary=gemini_brain, fallback=ollama_brain)
 
-    # 3. Ses Sağlayıcıları (VoiceStudio Primary + Edge-TTS Fallback)
-    voice_studio = VoiceStudioClient(
-        base_url=settings.VOICESTUDIO_BASE_URL,
-        voice=settings.VOICESTUDIO_DEFAULT_VOICE,
+    # 3. Ses Sağlayıcıları (1: Piper Yerel Ultra Hızlı -> 2: Edge-TTS Son Çare)
+    piper_tts = PiperTTSClient(
+        model_path=settings.PIPER_MODEL_PATH,
+        length_scale=settings.PIPER_LENGTH_SCALE,
+        pitch_factor=settings.PIPER_PITCH_FACTOR,
     )
     edge_tts = EdgeTTSClient(voice=settings.FALLBACK_TTS_VOICE)
-    hybrid_voice = HybridTTS(primary=voice_studio, fallback=edge_tts)
+    hybrid_voice = HybridTTS(providers=[piper_tts, edge_tts])
 
     # 4. Ses Kayıt ve Oynatıcı
     recorder = AudioRecorder(
@@ -77,17 +79,27 @@ def main():
     if not started:
         logger.warning(f"Küresel kısayol ({settings.HOTKEY}) başlatılamadı!")
 
-    # Başlangıçta widget'ı 2 saniye gösterip kullanıcıya hazır olduğunu bildir
-    widget.set_state(
-        AssistantUIState.LISTENING,
-        f"{settings.HOTKEY.upper()} ile konuşmaya başlayın",
-    )
-    QTimer.singleShot(2500, lambda: widget.set_state(AssistantUIState.IDLE))
+    # 7. Terminalden Ctrl+C (SIGINT) ile temiz çıkış desteği
+    def sigint_handler(sig, frame):
+        logger.info("Terminalden Ctrl+C sinyali alındı. Asistan kapatılıyor...")
+        app.quit()
+
+    signal.signal(signal.SIGINT, sigint_handler)
+
+    # Qt olay döngüsünün Python sinyallerini işleyebilmesi için periyodik timer (200ms)
+    sigint_timer = QTimer()
+    sigint_timer.timeout.connect(lambda: None)
+    sigint_timer.start(200)
+
+    # 8. Başlangıçta widget'ı 'Dinlemeye Hazır' olarak 4.5 saniye göster
+    # Kullanıcı 4-5 saniye içinde kısayola basmazsa widget otomatik yukarı kayıp gizlenir.
+    widget.show_ready_banner(duration_ms=4500)
 
     logger.info(f"Asistan hazır! Dinleme kısayolu: {settings.HOTKEY.upper()}")
 
-    # Çıkış işlemi temizliği
+    # 9. Olay döngüsü ve çıkış işlemi temizliği
     exit_code = app.exec()
+    logger.info("Asistan sonlandırılıyor, kaynaklar temizleniyor...")
     hotkey_listener.stop()
     recorder.stop_recording()
     player.stop()

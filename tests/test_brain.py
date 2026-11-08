@@ -46,6 +46,25 @@ def test_gemini_provider_fallback_on_503():
         assert mock_client.models.generate_content.call_count == 2
 
 
+def test_gemini_provider_fallback_on_timeout():
+    """Model 504 Gateway Timeout veya Timeout hatası verdiğinde diğer modele geçmeli."""
+    provider = GeminiProvider(api_key="fake_key", model="gemini-3.5-flash")
+
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.text = "Timeout sonrası yedek cevabı"
+    mock_client.models.generate_content.side_effect = [
+        Exception("504 DEADLINE_EXCEEDED. Deadline expired before operation could complete."),
+        mock_resp,
+    ]
+
+    with patch.object(provider, "_get_client", return_value=mock_client):
+        result = provider.generate_response("Merhaba")
+        assert result.text == "Timeout sonrası yedek cevabı"
+        assert mock_client.models.generate_content.call_count == 2
+
+
+
 def test_ollama_provider_mocked():
     """Ollama API çağrısının mock ile doğru format döndürdüğünü test eder."""
     provider = OllamaProvider(base_url="http://localhost:11434", model="qwen2.5:3b")

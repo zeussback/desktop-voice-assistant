@@ -1,37 +1,45 @@
 import logging
-from typing import Optional
+from typing import List, Optional
 from src.voice.tts_base import BaseTTSClient
 
 logger = logging.getLogger(__name__)
 
 
 class HybridTTS(BaseTTSClient):
-    """VoiceStudio (birincil) ve Edge-TTS (yedek) arasında geçiş sağlayan ses yöneticisi."""
+    """Sırayla TTS motorlarını deneyen (Piper -> Edge-TTS) hibrit ses yöneticisi."""
 
     def __init__(
         self,
-        primary: BaseTTSClient,
+        providers: Optional[List[BaseTTSClient]] = None,
+        primary: Optional[BaseTTSClient] = None,
         fallback: Optional[BaseTTSClient] = None,
     ):
-        self.primary = primary
-        self.fallback = fallback
+        if providers is not None:
+            self.providers = [p for p in providers if p is not None]
+        else:
+            self.providers = []
+            if primary is not None:
+                self.providers.append(primary)
+            if fallback is not None:
+                self.providers.append(fallback)
 
     def is_available(self) -> bool:
-        return self.primary.is_available() or (
-            self.fallback is not None and self.fallback.is_available()
-        )
+        return any(p.is_available() for p in self.providers)
 
     def synthesize(self, text: str) -> bytes:
-        if self.primary.is_available():
-            try:
-                return self.primary.synthesize(text)
-            except Exception as e:
-                logger.warning(
-                    f"Birincil TTS motoru hata verdi ({e}), yedek motora geçiliyor."
-                )
+        last_error = None
+        for provider in self.providers:
+            if provider.is_available():
+                try:
+                    logger.info(f"TTS motoru kullanılıyor: {provider.__class__.__name__}")
+                    return provider.synthesize(text)
+                except Exception as e:
+                    logger.warning(
+                        f"TTS motoru ({provider.__class__.__name__}) hata verdi: {e}. Bir sonraki motora geçiliyor."
+                    )
+                    last_error = e
+                    continue
 
-        if self.fallback is not None:
-            logger.info("Yedek TTS motoru (Edge-TTS) kullanılıyor.")
-            return self.fallback.synthesize(text)
-
+        if last_error:
+            raise last_error
         raise RuntimeError("Kullanılabilir hiçbir TTS motoru bulunamadı!")
