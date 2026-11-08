@@ -5,4 +5,4 @@
 * **Why now:** API kota sınırlarına veya ücret duvarlarına takılmadan, robotik olmayan insansı ses kalitesiyle akıcı, kesintisiz ve sıfır maliyetli bir yapay zeka asistanı deneyimi yaşamak.
 * **Success:** Kısayola basıldığında widget'ın akıcı bir animasyonla açılması, "Dinleniyor → Düşünülüyor → Konuşuyor" durumlarını şıkça göstermesi; hem bulut hem de hafif yerel LLM ile doğal Türkçe sesli yanıt üretebilmesi.
 * **Constraint:** Sıfır maliyet (ücretsiz katmanlar ve açık kaynak), bilgisayarı kasmayan hafif donanım tüketimi, API kota aşımına karşı hibrit dayanıklılık, robotik olmayan doğal Türkçe ses.
-* **Out of scope (1. Aşama / MVP Dışı):** Ekran görüntüsü analizi (Vision) ve bilgisayarda otonom komut/uygulama çalıştırma yetenekleri (bu yetenekler 1. aşama ses döngüsü ve widget'ı stabil kılındıktan sonra 2. ve 3. aşamalarda sırayla eklenecektir).
+* **Out of scope (1. Aşama / MVP Dışı):** Bilgisayarda otonom komut/uygulama çalıştırma ve işletim sistemi kontrolü (Aşama 2) ile ekran görüntüsü analizi / Vision (Aşama 3) — bu yetenekler 1. aşama ses döngüsü ve widget'ı stabil kılındıktan sonra sırayla eklenecektir.

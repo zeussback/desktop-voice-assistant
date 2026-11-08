@@ -1,154 +1,133 @@
-# Task List: Desktop Voice Assistant (Phase 1 MVP)
+# Task List: Desktop Voice Assistant
 
-## Phase 1: Foundation & Brain Integration
+## Phase 1: MVP (Voice Loop, Jarvis Persona & Liquid Glass UI) — COMPLETED ✅
+- [x] Task 1: Project Setup, Dependencies & Configuration
+- [x] Task 2: Brain Providers (Gemini Primary + Ollama Fallback)
+- [x] Task 3: Microphone Audio Capture & Buffer
+- [x] Task 4: Voice Synthesis & Audio Player (Piper TTS + Edge-TTS)
+- [x] Task 5: Glass-Liquid PySide6 Widget & State Animations
+- [x] Task 6: Global Hotkey Listener (Toggle Mode)
+- [x] Task 7: Assistant State Machine & Orchestrator
+- [x] Task 8: Polishing, CLI Startup & User Guide
+- [x] Final Checkpoint: Phase 1 MVP Complete (34 unit tests passing, commit `b48503c`)
 
-### Task 1: Project Setup, Dependencies & Configuration
-**Description:** Proje dizin yapısını, Python sanal ortam bağımlılıklarını (`requirements.txt`), tip güvenli konfigürasyon sınıfını (`config.py`) ve `.env.example` şablonunu oluşturur.
+---
+
+## Phase 2: OS Control & Tool Engine
+
+### Task 1: Tool Engine Core (`BaseTool`, `ToolResult`, `ToolRegistry`)
+**Description:** Araçların tanımlanacağı `BaseTool` soyut sınıfını, standart `ToolResult` sonucunu ve araçları kaydedip Gemini Function Calling JSON şemalarına dönüştüren `ToolRegistry` merkezi motorunu oluşturur.
 **Acceptance criteria:**
-- [x] `requirements.txt` PySide6, pynput, sounddevice, numpy, google-genai, ollama, edge-tts, pygame içerir.
-- [x] `src/config.py` Pydantic ile `.env` dosyasını okuyup varsayılan kısayolu (`Ctrl+Space`), Gemini model adını ve VoiceStudio URL'sini yönetir.
+- [x] `BaseTool` sınıfı `name`, `description`, `confirmation_policy`, `get_declaration()` ve `execute(**kwargs)` arayüzlerini içerir.
+- [x] `ToolResult` (Pydantic) başarı durumu (`success`), seslendirilecek mesaj (`message`), veri sözlüğü (`data`) ve teyit alanlarını (`needs_confirmation`, `confirmation_prompt`) barındırır.
+- [x] `ToolRegistry` araçları kaydeder (`register`), isim çakışmalarını önler, Gemini `types.FunctionDeclaration` uyumlu şema listesi üretir ve araçları çağırır (`execute`).
 **Verification:**
-- [x] `python -c "import pydantic; from src.config import settings; print(settings.HOTKEY)"` başarıyla çalışır.
+- [x] `pytest tests/test_tools.py` testleri başarıyla geçer.
 **Dependencies:** None
 **Files likely touched:**
-- `requirements.txt`
-- `.env.example`
-- `src/__init__.py`
-- `src/config.py`
-- `pytest.ini`
-- `tests/test_config.py`
-**Estimated scope:** Small (2-3 files)
+- `src/tools/__init__.py`
+- `src/tools/base.py`
+- `src/tools/registry.py`
+- `tests/test_tools.py`
+**Estimated scope:** Small (4 files)
 
-### Task 2: Brain Providers (Gemini Primary + Ollama Fallback)
-**Description:** `BaseBrainProvider` soyut sınıfı tanımlanır; `GeminiProvider` (Google AI Studio / Gemini API) ve `OllamaProvider` (yerel hafif model) implementasyonları ile otomatik fallback mekanizması kurulur.
+---
+
+### Task 2: System Audio & Media Control Tools
+**Description:** Windows ana ses düzeyini okuma/ayarlama (`pycaw`) ve klavye sanal tuşlarıyla medya oynatma/durdurma (`ctypes` keybd_event) araçlarını geliştirir.
 **Acceptance criteria:**
-- [x] `GeminiProvider` kullanıcının API anahtarı ile Türkçe isteme yanıt üretir.
-- [x] Gemini hata verirse veya bağlantı yoksa `OllamaProvider` otomatik devreye girer.
-- [x] Her iki sağlayıcı da standart `BrainResponse` formatı döner.
+- [ ] `SystemAudioTool` eylemleri: `set_volume` (0-100 aralığında sınırlandırılmış), `change_volume` (artır/azalt), `mute` ve `unmute`.
+- [ ] `MediaControlTool` eylemleri: `play_pause`, `next_track`, `prev_track`, `stop`.
+- [ ] Ses ve medya işlemleri sonucunda Jarvis'in söyleyeceği doğal Türkçe mesajlar üretilir.
 **Verification:**
-- [x] `pytest tests/test_brain.py` testleri başarılı geçer.
+- [ ] `pytest tests/test_os_control.py -k "audio or media"` testleri geçer.
 **Dependencies:** Task 1
+**Files likely touched:**
+- `src/tools/system_audio.py`
+- `src/tools/media_control.py`
+- `tests/test_os_control.py`
+- `requirements.txt`
+**Estimated scope:** Small (3-4 files)
+
+---
+
+### Task 3: Display Brightness & Web Browser Tools
+**Description:** Monitör parlaklığını kontrol eden `SystemBrightnessTool` (`screen_brightness_control`) ve varsayılan tarayıcıda URL açıp Google araması yapan `WebBrowserTool` araçlarını geliştirir.
+**Acceptance criteria:**
+- [ ] `SystemBrightnessTool` eylemleri: `set_brightness` (0-100), `change_brightness` (artır/azalt), `get_brightness`. Monitör desteklemiyorsa çökmek yerine kullanıcıya anlaşılır bilgi döner.
+- [ ] `WebBrowserTool` eylemleri: `open_url` (http/https doğrulamalı) ve `search_google` (arama terimlerini URL kodlamalı).
+**Verification:**
+- [ ] `pytest tests/test_os_control.py -k "brightness or browser"` testleri geçer.
+**Dependencies:** Task 1
+**Files likely touched:**
+- `src/tools/system_brightness.py`
+- `src/tools/web_browser.py`
+- `tests/test_os_control.py`
+- `requirements.txt`
+**Estimated scope:** Small (3-4 files)
+
+---
+
+## Checkpoint 1: Tool Registry & Core System Tools
+- [ ] `test_tools.py` ve `test_os_control.py` testleri geçer.
+- [ ] Ses, medya, parlaklık ve web araçları mock'larla doğrulanır.
+
+---
+
+### Task 4: Application Control & Power Management Tools
+**Description:** Windows uygulamalarını açıp (`os.startfile` / Başlat Menüsü taraması) çalışan süreçleri kapatan (`psutil`) `AppControlTool` ile teyit gerektiren sistem kapatma/yeniden başlatma aracı `SystemPowerTool`'u geliştirir.
+**Acceptance criteria:**
+- [ ] `AppControlTool`: Uygulama adı verildiğinde Başlat menüsü kısayollarında (`.lnk`) ve sistem yollarında arayıp başlatır. Kapatma istendiğinde `psutil` ile çalışan süreci bulup güvenle sonlandırır. Bulunamazsa kibar geri bildirim verir.
+- [ ] `SystemPowerTool`: `shutdown`, `restart`, `sleep` komutlarını içerir ve `ConfirmationPolicy.REQUIRE_CONFIRMATION` işaretlidir; doğrudan çalıştırmak yerine `needs_confirmation=True` ve sesli teyit sorusu döner.
+**Verification:**
+- [ ] `pytest tests/test_os_control.py -k "app or power"` testleri geçer.
+**Dependencies:** Task 1
+**Files likely touched:**
+- `src/tools/app_control.py`
+- `src/tools/system_power.py`
+- `tests/test_os_control.py`
+**Estimated scope:** Medium (3 files)
+
+---
+
+### Task 5: Gemini Provider Tool Calling Loop & Function Execution
+**Description:** `GeminiProvider` sınıfını `ToolRegistry` ile entegre ederek Gemini'a tool tanımlarını gönderir, dönen `function_call` çağrılarını yakalar ve araç sonuçlarını modele veya kullanıcıya iletir.
+**Acceptance criteria:**
+- [ ] `GeminiProvider.generate_response` metodu `tools` parametresini destekler.
+- [ ] Gemini yanıtında `function_calls` varsa, ilgili araç `ToolRegistry` üzerinden çalıştırılır ve sonuç alınır.
+- [ ] Araç sonucuna göre doğrudan seslendirilecek mesaj veya ikinci tur model çıktısı üretilir.
+**Verification:**
+- [ ] `pytest tests/test_brain.py` testleri (mock function calling senaryoları dahil) geçer.
+**Dependencies:** Tasks 1, 2, 3, 4
 **Files likely touched:**
 - `src/brain/provider_base.py`
 - `src/brain/gemini_provider.py`
-- `src/brain/ollama_provider.py`
-- `src/brain/hybrid_brain.py`
 - `tests/test_brain.py`
-**Estimated scope:** Medium (3-4 files)
-
-## Checkpoint 1: Brain Integration
-- [x] Brain provider testleri (`test_brain.py`) geçer.
-- [x] Hem Gemini hem Ollama arayüzleri standart formatta yanıt döndürür.
-
----
-
-## Phase 2: Audio & Voice Engines
-
-### Task 3: Microphone Audio Capture & Buffer
-**Description:** `sounddevice` ve `numpy` kullanarak mikrofon sesini başlatan ve durduran (`start_recording`, `stop_recording`) thread-safe ses kayıt modülü oluşturur.
-**Acceptance criteria:**
-- [x] Toggle ile kayıt başlatılıp durdurulduğunda geçici WAV tamponu elde edilir.
-- [x] Mikrofon sessizlik / ses seviyesi (RMS) hesaplanarak ileride ses animasyonlarında kullanılacak seviye verisi sağlanır.
-**Verification:**
-- [x] `pytest tests/test_audio_recorder.py` veya loopback test başarıyla çalışır.
-**Dependencies:** Task 1
-**Files likely touched:**
-- `src/core/audio_recorder.py`
-- `tests/test_audio_recorder.py`
-**Estimated scope:** Small (2 files)
-
-### Task 4: Voice Synthesis & Audio Player (VoiceStudio + Edge-TTS)
-**Description:** Metni sese dönüştüren `VoiceStudioClient` (birincil) ve `EdgeTTSClient` (yedek) motorları ile üretilen sesi UI'ı dondurmadan çalan `AudioPlayer` modülü geliştirilir.
-**Acceptance criteria:**
-- [x] `VoiceStudioClient` yerel sunucuyu (`http://localhost:3900`) kontrol eder; yanıt alamazsa otomatik `EdgeTTSClient` devreye girer.
-- [x] Üretilen ses `AudioPlayer` ile kesintisiz ve temiz oynatılır.
-**Verification:**
-- [x] `pytest tests/test_voice.py` testleri çalışır ve kısa bir Türkçe metin test amaçlı sese dönüştürülür.
-**Dependencies:** Task 1
-**Files likely touched:**
-- `src/voice/tts_base.py`
-- `src/voice/voicestudio_client.py`
-- `src/voice/edge_tts_client.py`
-- `src/voice/hybrid_tts.py`
-- `src/voice/audio_player.py`
-- `tests/test_voice.py`
-**Estimated scope:** Medium (4 files)
-
-## Checkpoint 2: Voice & Audio Subsystem
-- [x] Ses kaydı ve ses sentezi izolasyon testlerinden geçer.
-- [x] Yedekleme mantığı (VoiceStudio kapalıysa edge-tts) sorunsuz çalışır.
-
----
-
-## Phase 3: Liquid Glass UI Widget & Global Hotkey
-
-### Task 5: Glass-Liquid PySide6 Widget & State Animations
-**Description:** Ekranın üst-orta kısmında konumlanan, çerçevesiz, yarı saydam, modern buzlu cam (acrylic/blur) efektli ve animasyonlu durum göstergesi (IDLE, LISTENING, THINKING, SPEAKING) geliştirilir.
-**Acceptance criteria:**
-- [x] Widget ekranın en üstünde (`WindowStaysOnTopHint`), çerçevesiz ve şeffaf arka planla açılır.
-- [x] "Dinleniyor", "Düşünülüyor", "Konuşuyor" geçişlerinde yumuşak yaylanma/genişleme ve renk geçiş animasyonu çalışır.
-- [x] Dinleme bittiğinde veya konuşma tamamlandığında widget şık bir şekilde küçülür/gizlenir.
-**Verification:**
-- [x] `python -m src.ui.widget` ile widget bağımsız olarak çalıştırılıp görsel durumları test edilir.
-**Dependencies:** Task 1
-**Files likely touched:**
-- `src/ui/widget.py`
-- `src/ui/styles.py`
-- `tests/test_ui.py`
 **Estimated scope:** Medium (3 files)
 
-### Task 6: Global Hotkey Listener (Toggle Mode)
-**Description:** `pynput` ile sistem genelinde basıldığında (`Ctrl+Space` veya `Alt+Space`) `toggle` sinyali üreten küresel kısayol yakalayıcı thread oluşturur.
-**Acceptance criteria:**
-- [x] Diğer pencereler odaktayken dahi kısayola basıldığında sinyal yakalanır.
-- [x] İlk basışta `ON_START`, ikinci basışta `ON_STOP` sinyali üretilir.
-**Verification:**
-- [x] Kısayol testi ile basışların doğru toggle durumunu tetiklediği doğrulanır.
-**Dependencies:** Task 1
-**Files likely touched:**
-- `src/core/hotkey_listener.py`
-- `tests/test_hotkey.py`
-**Estimated scope:** Small (2 files)
-
-## Checkpoint 3: UI & Hotkey Integration
-- [x] Kısayola basıldığında widget ekranın üstünde animasyonla açılır ve kapanır.
-- [x] Kullanıcı deneyimi akıcı ve takılmasızdır.
-
 ---
 
-## Phase 4: Integration & End-to-End Orchestration
-
-### Task 7: Assistant State Machine & Orchestrator
-**Description:** Hotkey, UI Widget, Audio Recorder, Brain ve Voice modüllerini `AssistantController` çatısı altında birbirine bağlar.
+### Task 6: Assistant Controller Confirmation State Machine & End-to-End Orchestration
+**Description:** `AssistantController`'a `ToolRegistry`'yi bağlar; araç çalıştırma ve kritik eylemler için `AWAITING_CONFIRMATION` durumunu ekleyerek sesli onay döngüsünü tamamlar.
 **Acceptance criteria:**
-- [x] 1. Basış (Ctrl+Space): Widget "Dinleniyor..." animasyonuyla açılır, mikrofon kayda başlar.
-- [x] 2. Basış (Ctrl+Space): Mikrofon durur, widget "Düşünülüyor..." durumuna geçer, ses Brain'e (Gemini) aktarılır.
-- [x] Yanıt geldiğinde: Widget "Konuşuyor..." durumuna geçer, Voice motoru sesi üretir ve hoparlörden çalar.
-- [x] Konuşma bittiğinde: Widget yumuşak bir animasyonla kapanır (IDLE).
+- [ ] Araç `needs_confirmation=True` döndüğünde asistan `AWAITING_CONFIRMATION` durumuna geçer ve teyit sorusunu seslendirir.
+- [ ] Kullanıcının bir sonraki cevabında onay kelimesi ("evet", "kapat", "onayla") varsa eylem icra edilir; ret kelimesi ("hayır", "iptal") varsa eylem iptal edilir.
+- [ ] Normal araçlarda işlem tamamlandıktan sonra sonuç metni Piper TTS ile seslendirilir.
+- [ ] Tüm eski (34) ve yeni testler (toplam 50+) hatasız geçer.
 **Verification:**
-- [x] Uçtan uca diyalog testi başarıyla tamamlanır.
-**Dependencies:** Tasks 2, 3, 4, 5, 6
+- [ ] `pytest tests/ -v` komutuyla tüm test süiti başarıyla tamamlanır.
+- [ ] Canlı testte sesli olarak ses açma/kapama, uygulama açma ve web arama komutları doğrulanır.
+**Dependencies:** Tasks 1, 2, 3, 4, 5
 **Files likely touched:**
 - `src/core/assistant.py`
 - `src/main.py`
+- `tests/test_assistant_tools.py`
 - `tests/test_assistant_controller.py`
-**Estimated scope:** Medium (2 files)
+**Estimated scope:** Medium (4 files)
 
-### Task 8: Polishing, CLI Startup & User Guide
-**Description:** `.env` kurulum rehberi, hata yakalama (mikrofon yok, API kotası, internet kesintisi), masaüstü başlatıcı ve `README.md` dokümantasyonu tamamlanır.
-**Acceptance criteria:**
-- [x] Kullanıcı kolayca `.env` dosyasını oluşturup Gemini API anahtarını girebilir.
-- [x] İnternet veya servis hatalarında widget kırmızı/uyarı animasyonuyla kullanıcıyı bilgilendirir, uygulama çökmez.
-**Verification:**
-- [x] `python -m src.main` ile asistan hatasız ayağa kalkar.
-**Dependencies:** Task 7
-**Files likely touched:**
-- `README.md`
-- `src/main.py`
-- `.gitignore`
-**Estimated scope:** Small (2 files)
+---
 
-## Final Checkpoint: Phase 1 MVP Complete
-- [x] Tüm testler geçer (`pytest`).
-- [x] Asistan kesintisiz sesli konuşma döngüsünü tamamlar.
-- [x] Kullanıcı ile birlikte ilk canlı deneme gerçekleştirilir.
+## Final Checkpoint: Phase 2 OS Control Complete
+- [ ] Tüm testler yeşil (`pytest`).
+- [ ] Jarvis sesli komutla ses ayarlarını, medyayı, parlaklığı, uygulamaları ve web aramalarını başarıyla yönetir.
+- [ ] Bilgisayarı kapatma gibi kritik komutlarda sesli teyit güvenle çalışır.
