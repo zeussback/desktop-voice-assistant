@@ -280,3 +280,132 @@ def test_web_browser_invalid_action():
     res = tool.execute("invalid_action")
     assert res.success is False
     assert "Bilinmeyen" in res.message
+
+
+# ==========================================
+# AppControlTool Tests
+# ==========================================
+from src.tools.app_control import AppControlTool, _clean_app_name
+
+
+def test_clean_app_name_suffixes():
+    assert _clean_app_name("spotify'ı") == "spotify"
+    assert _clean_app_name("chrome'u") == "chrome"
+    assert _clean_app_name("Discord'u") == "discord"
+    assert _clean_app_name("Not Defteri") == "not defteri"
+
+
+def test_app_control_declaration():
+    tool = AppControlTool()
+    decl = tool.get_declaration()
+    assert decl["name"] == "control_application"
+    assert "action" in decl["parameters"]["properties"]
+    assert "app_name" in decl["parameters"]["properties"]
+
+
+def test_app_control_launch_builtin():
+    tool = AppControlTool()
+    tool._launch = MagicMock()
+
+    res = tool.execute("launch_app", app_name="hesap makinesi")
+    assert res.success is True
+    assert "açıldı" in res.message
+    tool._launch.assert_called_once_with("calc.exe")
+
+
+def test_app_control_launch_not_found():
+    tool = AppControlTool()
+    res = tool.execute("launch_app", app_name="olmayan_hayali_uygulama_xyz123")
+    assert res.success is False
+    assert "bulamadım" in res.message
+
+
+def test_app_control_launch_missing_name():
+    tool = AppControlTool()
+    res = tool.execute("launch_app")
+    assert res.success is False
+    assert "belirtiniz" in res.message
+
+
+def test_app_control_close_success():
+    tool = AppControlTool()
+    tool._terminate_process = MagicMock(return_value=2)
+
+    res = tool.execute("close_app", app_name="spotify")
+    assert res.success is True
+    assert "kapatıldı" in res.message
+    assert res.data["processes_terminated"] == 2
+
+
+def test_app_control_close_not_running():
+    tool = AppControlTool()
+    tool._terminate_process = MagicMock(return_value=0)
+
+    res = tool.execute("close_app", app_name="spotify")
+    assert res.success is False
+    assert "zaten çalışmıyor" in res.message
+
+
+def test_app_control_invalid_action():
+    tool = AppControlTool()
+    res = tool.execute("invalid_action", app_name="spotify")
+    assert res.success is False
+    assert "Bilinmeyen" in res.message
+
+
+# ==========================================
+# SystemPowerTool Tests
+# ==========================================
+from src.tools.system_power import SystemPowerTool
+from src.tools.registry import ToolRegistry
+from src.tools.base import ConfirmationPolicy
+
+
+def test_system_power_declaration_and_policy():
+    tool = SystemPowerTool()
+    assert tool.confirmation_policy == ConfirmationPolicy.REQUIRE_CONFIRMATION
+    decl = tool.get_declaration()
+    assert decl["name"] == "control_system_power"
+    assert "action" in decl["parameters"]["properties"]
+
+
+def test_system_power_requires_confirmation_via_registry():
+    registry = ToolRegistry()
+    tool = SystemPowerTool()
+    tool._execute_power_command = MagicMock()
+    registry.register(tool)
+
+    # 1. Unconfirmed execution -> Must ask for confirmation and NOT execute
+    res1 = registry.execute("control_system_power", {"action": "shutdown"}, confirmed=False)
+    assert res1.success is False
+    assert res1.needs_confirmation is True
+    assert "emin misiniz" in res1.message
+    tool._execute_power_command.assert_not_called()
+
+    # 2. Confirmed execution -> Executes shutdown
+    res2 = registry.execute("control_system_power", {"action": "shutdown"}, confirmed=True)
+    assert res2.success is True
+    assert "kapatılıyor" in res2.message
+    tool._execute_power_command.assert_called_once_with("shutdown")
+
+
+def test_system_power_actions():
+    tool = SystemPowerTool()
+    tool._execute_power_command = MagicMock()
+
+    res_restart = tool.execute("restart")
+    assert res_restart.success is True
+    assert "yeniden başlatılıyor" in res_restart.message
+    tool._execute_power_command.assert_called_with("restart")
+
+    res_sleep = tool.execute("sleep")
+    assert res_sleep.success is True
+    assert "uyku moduna" in res_sleep.message
+    tool._execute_power_command.assert_called_with("sleep")
+
+
+def test_system_power_invalid_action():
+    tool = SystemPowerTool()
+    res = tool.execute("invalid_action")
+    assert res.success is False
+    assert "Bilinmeyen" in res.message

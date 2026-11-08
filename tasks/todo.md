@@ -77,10 +77,10 @@
 ### Task 4: Application Control & Power Management Tools
 **Description:** Windows uygulamalarını açıp (`os.startfile` / Başlat Menüsü taraması) çalışan süreçleri kapatan (`psutil`) `AppControlTool` ile teyit gerektiren sistem kapatma/yeniden başlatma aracı `SystemPowerTool`'u geliştirir.
 **Acceptance criteria:**
-- [ ] `AppControlTool`: Uygulama adı verildiğinde Başlat menüsü kısayollarında (`.lnk`) ve sistem yollarında arayıp başlatır. Kapatma istendiğinde `psutil` ile çalışan süreci bulup güvenle sonlandırır. Bulunamazsa kibar geri bildirim verir.
-- [ ] `SystemPowerTool`: `shutdown`, `restart`, `sleep` komutlarını içerir ve `ConfirmationPolicy.REQUIRE_CONFIRMATION` işaretlidir; doğrudan çalıştırmak yerine `needs_confirmation=True` ve sesli teyit sorusu döner.
+- [x] `AppControlTool`: Uygulama adı verildiğinde Başlat menüsü kısayollarında (`.lnk`) ve sistem yollarında arayıp başlatır. Kapatma istendiğinde `psutil` ile çalışan süreci bulup güvenle sonlandırır. Bulunamazsa kibar geri bildirim verir.
+- [x] `SystemPowerTool`: `shutdown`, `restart`, `sleep` komutlarını içerir ve `ConfirmationPolicy.REQUIRE_CONFIRMATION` işaretlidir; doğrudan çalıştırmak yerine `needs_confirmation=True` ve sesli teyit sorusu döner.
 **Verification:**
-- [ ] `pytest tests/test_os_control.py -k "app or power"` testleri geçer.
+- [x] `pytest tests/test_os_control.py -k "app or power"` testleri geçer.
 **Dependencies:** Task 1
 **Files likely touched:**
 - `src/tools/app_control.py`
