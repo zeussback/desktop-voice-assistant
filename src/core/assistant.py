@@ -59,6 +59,8 @@ class AssistantController(QObject):
     sig_state_changed = Signal(str, str)
     sig_audio_level = Signal(float)
     sig_quit_requested = Signal()
+    sig_start_rms_timer = Signal(int)
+    sig_stop_rms_timer = Signal()
 
     def __init__(
         self,
@@ -86,9 +88,11 @@ class AssistantController(QObject):
         self.sig_audio_level.connect(self.widget.update_audio_level)
         self.sig_quit_requested.connect(self._on_quit_ui)
 
-        # Mikrofon seviyesi anlık izleme zamanlayıcısı
+        # Mikrofon seviyesi anlık izleme zamanlayıcısı (Thread-Safe Sinyal/Slot)
         self._rms_timer = QTimer(self)
         self._rms_timer.timeout.connect(self._poll_rms_level)
+        self.sig_start_rms_timer.connect(self._rms_timer.start)
+        self.sig_stop_rms_timer.connect(self._rms_timer.stop)
 
     def _poll_rms_level(self):
         if self.recorder.is_recording:
@@ -119,14 +123,14 @@ class AssistantController(QObject):
                 self.sig_state_changed.emit(
                     AssistantUIState.LISTENING.value, "Konuşmanız dinleniyor"
                 )
-                self._rms_timer.start(50)  # Her 50ms'de bir ses seviyesi güncelle
+                self.sig_start_rms_timer.emit(50)  # Thread-safe sinyal ile zamanlayıcıyı başlat
             else:
                 self.sig_state_changed.emit(
                     AssistantUIState.ERROR.value, "Mikrofon başlatılamadı"
                 )
         else:
             # 2. Basış -> Dinleme Durur, Düşünme & Cevap Başlar
-            self._rms_timer.stop()
+            self.sig_stop_rms_timer.emit()  # Thread-safe sinyal ile zamanlayıcıyı durdur
             self.sig_audio_level.emit(0.0)
             audio_bytes = self.recorder.stop_recording()
 
