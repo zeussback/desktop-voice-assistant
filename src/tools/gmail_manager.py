@@ -1,6 +1,7 @@
-"""Gmail Management and Unsubscribe Tool for Jarvis."""
+"""Gmail Management, Content Summarization, and Intelligent Auto-Labeling Tool for Jarvis."""
 
 import base64
+from collections import Counter
 import html
 import logging
 import re
@@ -14,6 +15,7 @@ from src.tools.google_auth import GoogleAuthManager
 logger = logging.getLogger(__name__)
 
 GMAIL_MESSAGES_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages"
+GMAIL_LABELS_URL = "https://gmail.googleapis.com/gmail/v1/users/me/labels"
 
 
 def _clean_text_for_speech(text: str) -> str:
@@ -91,6 +93,75 @@ def _extract_body_text(payload: Dict[str, Any], max_chars: int = 1500) -> str:
     return ""
 
 
+def _determine_category(
+    sender: str,
+    subject: str,
+    snippet: str,
+    label_ids: Optional[List[str]] = None,
+) -> str:
+    """E-postanın gönderen, konu ve içerik bilgilerine göre semantik kategorisini belirler."""
+    combined = f"{sender} {subject} {snippet}".lower()
+    labels = label_ids or []
+
+    # 1. Finans (Banka, fatura, ödeme, dekont, ekstre, POS, para transferi)
+    finance_keywords = [
+        "bank", "fatura", "ödeme", "odeme", "dekont", "ekstre", "hesap özeti", "kredi kartı",
+        "garanti", "isbank", "iş bankası", "yapı kredi", "akbank", "ziraat", "qnb",
+        "enpara", "papara", "halkbank", "vakıfbank", "pos", "iban", "havale", "eft",
+        "tahsilat", "aws billing", "invoice", "receipt", "kripto", "binance", "vergi", "gib",
+        "turkcell fatura", "vodafone fatura", "türk telekom fatura", "enerjisa", "iski",
+        "ödendi", "ödeme alındı", "payment"
+    ]
+    if any(k in combined for k in finance_keywords):
+        return "Finans"
+
+    # 2. Sosyal Medya (LinkedIn, X, Instagram, YouTube, Facebook, Reddit, vb.)
+    social_keywords = [
+        "linkedin", "twitter", "instagram", "facebook", "youtube", "tiktok", "reddit",
+        "pinterest", "threads", "discord", "paylaştı:", "bağlantı kurdu", "ağınızda",
+        "takip etti", "kanalıma abone", "bildirim:", "sosyal medya", "social"
+    ]
+    if any(k in combined for k in social_keywords) or "CATEGORY_SOCIAL" in labels:
+        return "Sosyal Medya"
+
+    # 3. Alışveriş & Kargo (Sipariş, kargo takibi, e-ticaret)
+    shopping_keywords = [
+        "sipariş", "siparis", "kargo", "teslimat", "trendyol", "hepsiburada", "amazon.com.tr",
+        "yemeksepeti", "getir", "yurtiçi kargo", "aras kargo", "mng kargo", "sürat kargo",
+        "ptt kargo", "kargonuz yola çıktı", "siparişiniz alındı", "order confirmed", "tracking"
+    ]
+    if any(k in combined for k in shopping_keywords):
+        return "Alışveriş & Kargo"
+
+    # 4. Eğitim & Gelişim (Kurs, webinar, gelişim, eğitim rehberleri)
+    education_keywords = [
+        "eğitim", "egitim", "kurs", "webinar", "seminar", "rehber", "guide", "gelişim",
+        "öğren", "udemy", "coursera", "iman gadzhi", "training", "ders", "masterclass"
+    ]
+    if any(k in combined for k in education_keywords):
+        return "Eğitim & Gelişim"
+
+    # 5. Bülten & Tanıtım (Pazarlama, indirim, promosyon)
+    promo_keywords = [
+        "indirim", "fırsat", "kampanya", "bülten", "newsletter", "promosyon", "özel teklif",
+        "unsubscribe", "abonelikten çık", "reklam"
+    ]
+    if any(k in combined for k in promo_keywords) or "CATEGORY_PROMOTIONS" in labels:
+        return "Bülten & Tanıtım"
+
+    # 6. İş & Proje (Sprint, toplantı, müşteri, iş teklifi, kod)
+    work_keywords = [
+        "sprint", "proje", "toplantı", "meeting", "görüşme", "sunum", "sözleşme", "teklif",
+        "müşteri", "yazılım", "github", "gitlab", "jira", "pull request", "kod inceleme",
+        "task", "deadline", "iş birliği"
+    ]
+    if any(k in combined for k in work_keywords):
+        return "İş & Proje"
+
+    # 7. Varsayılan (Kişisel / Bireysel)
+    return "Kişisel"
+
+
 def _clean_summary_for_tts(text: str) -> str:
     """Yapay zekanın ürettiği özeti TTS için temizler ve tek 'efendim.' ile bitmesini garantiler."""
     if not text:
@@ -121,13 +192,13 @@ def _clean_summary_for_tts(text: str) -> str:
 
 
 class GmailManagerTool(BaseTool):
-    """Gmail gelen kutusu özetleme ve bülten aboneliği yönetim aracı."""
+    """Gmail gelen kutusu özetleme, otomatik etiketleme ve bülten aboneliği yönetim aracı."""
 
     name = "manage_gmail"
     description = (
-        "Gmail gelen kutusunu inceler; gelen e-postaları kimden geldiği, konusu ve ne anlattığı ile birlikte sesli özetler; "
-        "önemli ve önemsiz/bülten e-postaları sınıflandırır; bülten aboneliklerini tespit edip iptal eder. "
-        "'Maillerimi oku', 'Son gelen mailim ne', 'Gelen kutumu özetle', 'Önemli maillerim var mı' gibi taleplerde bu aracı çağır."
+        "Gmail gelen kutusunu inceler; e-postaları konusuna göre (Finans, Sosyal Medya, İş & Proje, Eğitim & Gelişim, Alışveriş & Kargo) "
+        "otomatik sınıflandırır, Gmail hesabınızda etiketlerini oluşturup basar ve ne anlattıklarını akıllıca özetler; bülten aboneliklerini iptal eder. "
+        "'Maillerimi etiketle', 'Son gelen mailim ne', 'Finans maillerim var mı', 'Sosyal medya bildirimlerimi özetle' gibi taleplerde bu aracı çağır."
     )
     confirmation_policy = ConfirmationPolicy.IMMEDIATE
 
@@ -151,6 +222,7 @@ class GmailManagerTool(BaseTool):
         self.model = model
         self.timeout_ms = timeout_ms
         self._client = client
+        self._labels_cache: Dict[str, str] = {}
 
     def _get_client(self):
         if self._client is not None:
@@ -173,6 +245,75 @@ class GmailManagerTool(BaseTool):
             logger.warning(f"Gemini client başlatılamadı: {e}")
             return None
 
+    def _get_or_create_label_id(self, label_name: str, headers: Dict[str, str]) -> Optional[str]:
+        """Gmail'de belirtilen isimdeki etiketin ID'sini döner; yoksa yeni etiket oluşturur."""
+        name_clean = label_name.strip()
+        name_key = name_clean.lower()
+
+        # 1. Önbellekte varsa doğrudan dön
+        if name_key in self._labels_cache:
+            return self._labels_cache[name_key]
+
+        # 2. Gmail'deki mevcut etiketleri çek
+        try:
+            resp = requests.get(GMAIL_LABELS_URL, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                for lbl in data.get("labels", []):
+                    self._labels_cache[lbl.get("name", "").lower()] = lbl.get("id")
+
+                if name_key in self._labels_cache:
+                    return self._labels_cache[name_key]
+        except Exception as e:
+            logger.warning(f"Gmail etiketleri listelenirken hata: {e}")
+
+        # 3. Etiket yoksa yeni etiket oluştur
+        try:
+            payload = {
+                "name": name_clean,
+                "labelListVisibility": "labelShow",
+                "messageListVisibility": "show",
+            }
+            create_resp = requests.post(GMAIL_LABELS_URL, headers=headers, json=payload, timeout=10)
+            if create_resp.status_code in (200, 201):
+                new_lbl = create_resp.json()
+                lbl_id = new_lbl.get("id")
+                if lbl_id:
+                    self._labels_cache[name_key] = lbl_id
+                    logger.info(f"Gmail'de yeni etiket oluşturuldu: '{name_clean}' (ID: {lbl_id})")
+                    return lbl_id
+            elif create_resp.status_code == 409:
+                return self._labels_cache.get(name_key)
+        except Exception as e:
+            logger.error(f"Gmail'de etiket oluşturulurken hata ({name_clean}): {e}")
+
+        return None
+
+    def _apply_label_to_message(self, message_id: str, label_name: str, headers: Dict[str, str]) -> bool:
+        """Belirtilen e-postaya Gmail etiketi ekler."""
+        if not label_name or not message_id:
+            return False
+
+        label_id = self._get_or_create_label_id(label_name, headers)
+        if not label_id:
+            return False
+
+        try:
+            modify_url = f"{GMAIL_MESSAGES_URL}/{message_id}/modify"
+            resp = requests.post(
+                modify_url,
+                headers=headers,
+                json={"addLabelIds": [label_id]},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                logger.info(f"E-posta ({message_id}) '{label_name}' olarak etiketlendi.")
+                return True
+        except Exception as e:
+            logger.warning(f"E-posta etiketlenirken hata ({message_id} -> {label_name}): {e}")
+
+        return False
+
     def get_declaration(self) -> Dict[str, Any]:
         return {
             "name": self.name,
@@ -184,11 +325,16 @@ class GmailManagerTool(BaseTool):
                         "type": "STRING",
                         "description": (
                             "Yapılacak e-posta eylemi: "
-                            "'summarize_inbox' (gelen kutusundaki önemli/okunmamış mailleri ve içeriklerini özetle), "
+                            "'summarize_inbox' (gelen kutusundaki e-postaları konusuna göre etiketler ve akıllı sesli özet sunar), "
+                            "'categorize_and_label' (gelen e-postaları konularına [Finans, Sosyal Medya, İş, Eğitim vb.] göre etiketleyip Gmail'de etiketlerini basar), "
                             "'list_newsletters' (reklam ve bülten aboneliklerini listele), "
                             "'unsubscribe' (belirli bir bülten veya reklam aboneliğinden çık)"
                         ),
-                        "enum": ["summarize_inbox", "list_newsletters", "unsubscribe"],
+                        "enum": ["summarize_inbox", "categorize_and_label", "list_newsletters", "unsubscribe"],
+                    },
+                    "category": {
+                        "type": "STRING",
+                        "description": "Filtrelenecek kategori (örn: 'Finans', 'Sosyal Medya', 'İş & Proje', 'Eğitim & Gelişim', 'Alışveriş & Kargo').",
                     },
                     "query": {
                         "type": "STRING",
@@ -200,7 +346,7 @@ class GmailManagerTool(BaseTool):
                     },
                     "max_results": {
                         "type": "INTEGER",
-                        "description": "İncelenecek maksimum e-posta sayısı (varsayılan: 5, en fazla 10).",
+                        "description": "İncelenecek maksimum e-posta sayısı (varsayılan: 5, en fazla 15).",
                     },
                 },
                 "required": ["action"],
@@ -234,33 +380,32 @@ class GmailManagerTool(BaseTool):
         from google.genai import types
 
         prompt_parts = [
-            f"Kullanıcının Talebi: {user_query or 'Gelen e-postaları özetle'}\n\n",
-            f"Gelen Kutusu ({len(emails)} e-posta):\n",
+            f"Kullanıcının Talebi: {user_query or 'Gelen e-postaları etiketle ve özetle'}\n\n",
+            f"Gelen Kutusu ({len(emails)} e-posta, etiketleri atandı):\n",
         ]
         for idx, e in enumerate(emails, start=1):
             body_preview = (e.get("body") or e.get("snippet") or "İçerik yok").strip()
             body_preview = body_preview[:1200]
-            cat_label = "Önemli / Kişisel" if e.get("is_important") else "Bülten / Tanıtım / Bildirim"
+            cat_label = e.get("category", "Genel")
             prompt_parts.append(
                 f"[{idx}] Gönderen: {e['sender']}\n"
                 f"Konu: {e['subject']}\n"
-                f"Kategori: {cat_label}\n"
+                f"Atanan Kategori/Etiket: {cat_label}\n"
                 f"Tarih: {e.get('date', '')}\n"
                 f"İçerik:\n{body_preview}\n\n"
             )
 
         system_instruction = (
             "Sen Jarvis adında son derece zeki, yetenekli ve saygılı bir masaüstü kişisel sekreterisin.\n"
-            "Kullanıcının gelen kutusundaki e-postaları bizzat okuyup anladıktan sonra sesli olarak raporluyorsun.\n\n"
+            "Kullanıcının gelen kutusundaki e-postaları okuyup kategorilerine göre (Finans, Sosyal Medya, İş & Proje, Eğitim & Gelişim, Alışveriş & Kargo, Bülten & Tanıtım, Kişisel) "
+            "organize ediyor ve sesli olarak raporluyorsun.\n\n"
             "ÖZETLEME VE ANALİZ KURALLARI:\n"
             "1. KESİNLİKLE e-postaların ham metnini veya başlığını dümdüz okuma. Kullanıcı bunu kesinlikle istemiyor.\n"
-            "2. E-postaları dikkatle oku; kimin gönderdiğini, ne ile alakalı olduğunu, ana fikrini, teklif edilen veya rica edilen bir konu olup olmadığını anla.\n"
-            "3. Bir yönetici sekreteri gibi kullanıcının vaktini almadan mantıklı, derli toplu ve akıcı bir Türkçe özet çıkar.\n"
-            "   - Örnek tek mail: 'İman Gadzhi B2B satış ve potansiyel müşterilere doğrudan ulaşma stratejileri üzerine bir eğitim rehberi paylaşmış efendim. Satış hunisi oluşturmanın detaylarından bahsediyor.'\n"
-            "   - Örnek çoklu mail: 'Gelen kutunuzda 10 yeni e-posta var efendim. Önemli olanlarda Zafer Ayan kullanıcı arayüzü tasarımı için ilham verici uygulama örneklerini derlemiş. Kalan e-postalarınız ise İman Gadzhi ve LinkedIn bildirimleri gibi tanıtım ve bültenlerden oluşuyor.'\n"
-            "4. Kullanıcı 'önemli ve önemsiz' olarak özetle demişse veya birden çok e-posta varsa kişisel ve iş e-postalarını öne çıkar; bülten ve reklamları ayrı toparla.\n"
-            "5. Asla emoji, link, teknik URL veya alakasız teknik kodları seslendirme. Tamamen doğal konuşma dili üret.\n"
-            "6. Cümlenin sonunu saygılı bir şekilde tek bir 'efendim.' ile bitir."
+            "2. E-postaları dikkatle oku; kimin gönderdiğini, ne ile alakalı olduğunu, ana fikrini, teklif veya talep olup olmadığını anla.\n"
+            "3. Raporunda kategorileri (Örn: Finans, Sosyal Medya, Eğitim) belirterek, e-postaların Gmail'de etiketlendiğini ve ne anlattıklarını 2-3 akıcı Türkçe cümleyle özetle.\n"
+            "   - Örnek: 'Gelen kutunuzda 3 yeni e-posta var ve etiketlendi efendim. Finans kategorisinde; Garanti Bankası hesap ekstresi gönderilmiş. Sosyal Medya'da; Zafer Ayan kullanıcı arayüzü örnekleri paylaşmış. Eğitim kategorisinde ise; İman Gadzhi müşteri bulma stratejileri üzerine bir rehber aktarmış.'\n"
+            "4. Asla emoji, link, teknik URL veya teknik kodları seslendirme. Tamamen doğal konuşma dili üret.\n"
+            "5. Cümlenin sonunu saygılı bir şekilde tek bir 'efendim.' ile bitir."
         )
 
         config = types.GenerateContentConfig(
@@ -295,6 +440,7 @@ class GmailManagerTool(BaseTool):
         self,
         action: str = "summarize_inbox",
         query: str = "is:unread",
+        category: Optional[str] = None,
         sender: Optional[str] = None,
         max_results: int = 5,
         confirmed: bool = False,
@@ -314,8 +460,14 @@ class GmailManagerTool(BaseTool):
             )
 
         try:
-            if action == "summarize_inbox":
-                return self._handle_summarize_inbox(query, max_results, headers)
+            if action in ("summarize_inbox", "categorize_and_label"):
+                return self._handle_summarize_and_label(
+                    query=query,
+                    category_filter=category,
+                    max_results=max_results,
+                    headers=headers,
+                    is_categorize_only=(action == "categorize_and_label"),
+                )
             elif action == "list_newsletters":
                 return self._handle_list_newsletters(max_results, headers)
             elif action == "unsubscribe":
@@ -332,9 +484,16 @@ class GmailManagerTool(BaseTool):
                 message=f"E-postalarınız incelenirken bir hata oluştu efendim: {str(e)}",
             )
 
-    def _handle_summarize_inbox(self, query: str, max_results: int, headers: Dict[str, str]) -> ToolResult:
+    def _handle_summarize_and_label(
+        self,
+        query: str,
+        category_filter: Optional[str],
+        max_results: int,
+        headers: Dict[str, str],
+        is_categorize_only: bool = False,
+    ) -> ToolResult:
         search_query = query or "is:unread"
-        limit = min(max(1, max_results), 10)
+        limit = min(max(1, max_results), 15)
         params = {"q": search_query, "maxResults": limit}
         resp = requests.get(GMAIL_MESSAGES_URL, headers=headers, params=params, timeout=10)
         if resp.status_code != 200:
@@ -357,7 +516,7 @@ class GmailManagerTool(BaseTool):
         if not messages_meta:
             return ToolResult(
                 success=True,
-                message="Gelen kutunuzda okunmamış yeni e-posta bulunmuyor efendim.",
+                message="Gelen kutunuzda okunmamış yeni bir e-posta bulunmuyor efendim.",
                 data={"count": 0, "emails": []},
             )
 
@@ -385,18 +544,18 @@ class GmailManagerTool(BaseTool):
                 subject_clean = _clean_text_for_speech(subj_hdr)
                 snippet_clean = _clean_text_for_speech(snippet)
 
-                # Önem sınıflandırması:
-                # Promosyon, sosyal bildirim veya bültenler 'önemsiz/bülten' kategorisine alınır.
-                is_promo_or_social = any(
-                    cat in label_ids
-                    for cat in ["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_UPDATES", "CATEGORY_FORUMS"]
-                ) or bool(unsub_hdr)
+                # Semantik Kategori Tespiti (Finans, Sosyal Medya, İş, Eğitim, vb.)
+                category_name = _determine_category(
+                    sender=sender_clean,
+                    subject=subject_clean,
+                    snippet=snippet_clean,
+                    label_ids=label_ids,
+                )
 
-                is_important = (
-                    "IMPORTANT" in label_ids
-                    or "STARRED" in label_ids
-                    or "CATEGORY_PERSONAL" in label_ids
-                ) and not is_promo_or_social
+                # Gmail hesabında etiketi oluştur ve e-postaya bas
+                self._apply_label_to_message(msg_id, category_name, headers)
+
+                is_important = category_name in ("Finans", "İş & Proje", "Kişisel")
 
                 emails.append({
                     "id": msg_id,
@@ -405,8 +564,8 @@ class GmailManagerTool(BaseTool):
                     "snippet": snippet_clean,
                     "body": body_text or snippet_clean,
                     "date": date_hdr,
+                    "category": category_name,
                     "is_important": is_important,
-                    "category": "important" if is_important else "other",
                 })
 
         count = len(messages_meta)
@@ -417,31 +576,56 @@ class GmailManagerTool(BaseTool):
                 data={"count": count, "emails": []},
             )
 
-        # 1. Öncelik: Gemini ile e-postanın içeriğini bizzat okutup mantıklı yönetici özeti al
+        # Kategori filtresi varsa uygula (örn: "Finans maillerim")
+        if category_filter:
+            cf_lower = category_filter.strip().lower()
+            emails = [e for e in emails if cf_lower in e["category"].lower()]
+            if not emails:
+                return ToolResult(
+                    success=True,
+                    message=f"'{category_filter}' kategorisinde yeni bir e-posta bulunmuyor efendim.",
+                    data={"count": 0, "emails": []},
+                )
+
+        # Sadece etiketleme raporu istendiyse
+        if is_categorize_only:
+            cat_counts = Counter(e["category"] for e in emails)
+            breakdown_list = [f"{count_val} adet {cat_name}" for cat_name, count_val in cat_counts.items()]
+            breakdown_str = ", ".join(breakdown_list)
+            spoken = (
+                f"Gelen kutunuzdaki {len(emails)} e-posta başarıyla incelendi ve Gmail'de etiketlendi: "
+                f"{breakdown_str} olarak düzenlendi efendim."
+            )
+            return ToolResult(
+                success=True,
+                message=spoken,
+                data={"count": len(emails), "categories": dict(cat_counts), "emails": emails},
+            )
+
+        # 1. Öncelik: Gemini ile kategorileri de içeren zeki yönetici özeti al
         gemini_summary = self._synthesize_with_gemini(emails, search_query)
         if gemini_summary:
             spoken = gemini_summary
         else:
-            # 2. Yedek: Gemini offline veya mock testte ise temiz özet
-            if len(emails) == 1:
-                e = emails[0]
-                spoken = f"Gelen son e-postanız {e['sender']} tarafından '{e['subject']}' konusuyla gönderilmiş efendim."
-            else:
-                important_list = [e for e in emails if e["is_important"]]
-                other_list = [e for e in emails if not e["is_important"]]
-                parts = []
-                if important_list:
-                    imp_descriptions = [f"{e['sender']} ('{e['subject']}')" for e in important_list[:3]]
-                    parts.append(f"Önemli olanlar: {', '.join(imp_descriptions)}")
-                if other_list:
-                    senders = list(dict.fromkeys(e["sender"] for e in other_list))
-                    parts.append(f"Kalan {len(other_list)} e-posta bülten ve bildirim: {', '.join(senders[:3])}")
-                spoken = f"Gelen kutunuzda {count} yeni e-posta var. {'. '.join(parts)} efendim."
+            # 2. Yedek: Gemini offline veya mock ortamında ise temiz kategorik özet
+            cat_counts = Counter(e["category"] for e in emails)
+            parts = []
+            for cat_name, count_val in cat_counts.items():
+                cat_emails = [e for e in emails if e["category"] == cat_name]
+                senders = list(dict.fromkeys(e["sender"] for e in cat_emails))
+                parts.append(f"{cat_name} kategorisinde {count_val} e-posta ({', '.join(senders[:2])})")
+            body_summary = ". ".join(parts)
+            spoken = f"Gelen kutunuzdaki {len(emails)} e-posta etiketlendi efendim: {body_summary}."
+
+            if not spoken.rstrip(" .!?,;").lower().endswith("efendim"):
+                spoken = spoken.rstrip(" .!?,;") + " efendim."
+            elif not spoken.endswith("."):
+                spoken = spoken.rstrip(" .!?,;") + "."
 
         return ToolResult(
             success=True,
             message=spoken,
-            data={"count": count, "emails": emails},
+            data={"count": len(emails), "emails": emails},
         )
 
     def _handle_list_newsletters(self, max_results: int, headers: Dict[str, str]) -> ToolResult:

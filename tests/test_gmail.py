@@ -228,3 +228,106 @@ class TestGmailManagerTool:
         tool = registry.get("manage_gmail")
         assert tool is not None
         assert isinstance(tool, GmailManagerTool)
+
+    def test_determine_category_all_types(self):
+        """Farklı e-posta gönderen ve konularının doğru kategorilere sınıflandırıldığını doğrular."""
+        from src.tools.gmail_manager import _determine_category
+
+        # Finans
+        assert _determine_category("Garanti BBVA", "Hesap Özeti ve Dekont", "") == "Finans"
+        assert _determine_category("AWS Billing", "November Invoice", "") == "Finans"
+        assert _determine_category("Turkcell Fatura", "Kasım Ayı Faturanız", "") == "Finans"
+
+        # Sosyal Medya
+        assert _determine_category("LinkedIn Updates", "Zafer AYAN paylaştı", "") == "Sosyal Medya"
+        assert _determine_category("YouTube", "Yeni video yüklendi", "", ["CATEGORY_SOCIAL"]) == "Sosyal Medya"
+
+        # Alışveriş & Kargo
+        assert _determine_category("Trendyol", "Siparişiniz kargoya verildi", "") == "Alışveriş & Kargo"
+        assert _determine_category("Yurtiçi Kargo", "Takip No: 12345", "") == "Alışveriş & Kargo"
+
+        # Eğitim & Gelişim
+        assert _determine_category("Udemy", "Yeni kurs eklendi", "") == "Eğitim & Gelişim"
+        assert _determine_category("Iman Gadzhi", "training guide", "") == "Eğitim & Gelişim"
+
+        # İş & Proje
+        assert _determine_category("Ahmet Yılmaz", "Sprint Planlaması Toplantısı", "") == "İş & Proje"
+
+        # Bülten & Tanıtım
+        assert _determine_category("Teknoloji Dergisi", "Haftalık Bülten İndirimi", "", ["CATEGORY_PROMOTIONS"]) == "Bülten & Tanıtım"
+
+        # Kişisel
+        assert _determine_category("Arkadaşım Ali", "Selam nasılsın", "") == "Kişisel"
+
+    def test_gmail_categorize_and_label_action(self):
+        """categorize_and_label eylemi mailleri etiketleyip Gmail'e basar ve döküm döner."""
+        from src.tools.gmail_manager import _determine_category
+
+        mock_auth = MagicMock()
+        mock_auth.is_authenticated.return_value = True
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer fake_token"}
+
+        mock_list_resp = MagicMock()
+        mock_list_resp.status_code = 200
+        mock_list_resp.json.return_value = {
+            "messages": [{"id": "msg_finans"}, {"id": "msg_social"}]
+        }
+
+        mock_finans_resp = MagicMock()
+        mock_finans_resp.status_code = 200
+        mock_finans_resp.json.return_value = {
+            "id": "msg_finans",
+            "snippet": "Garanti Bankası ekstresi...",
+            "payload": {
+                "headers": [
+                    {"name": "From", "value": "Garanti BBVA <ekstre@garanti.com.tr>"},
+                    {"name": "Subject", "value": "Kasım Ayı Hesap Ekstresi"},
+                ]
+            },
+        }
+
+        mock_social_resp = MagicMock()
+        mock_social_resp.status_code = 200
+        mock_social_resp.json.return_value = {
+            "id": "msg_social",
+            "snippet": "Zafer AYAN paylaştı...",
+            "payload": {
+                "headers": [
+                    {"name": "From", "value": "LinkedIn <updates@linkedin.com>"},
+                    {"name": "Subject", "value": "Zafer AYAN yeni bir gönderi paylaştı"},
+                ]
+            },
+        }
+
+        def mock_get(url, **kwargs):
+            if "messages/msg_finans" in url:
+                return mock_finans_resp
+            elif "messages/msg_social" in url:
+                return mock_social_resp
+            elif "labels" in url:
+                mock_labels = MagicMock()
+                mock_labels.status_code = 200
+                mock_labels.json.return_value = {"labels": [{"id": "Label_Finans", "name": "Finans"}]}
+                return mock_labels
+            return mock_list_resp
+
+        mock_post_resp = MagicMock()
+        mock_post_resp.status_code = 200
+        mock_post_resp.json.return_value = {"id": "Label_New"}
+
+        with patch("requests.get", side_effect=mock_get):
+            with patch("requests.post", return_value=mock_post_resp) as mock_post:
+                tool = GmailManagerTool(auth_manager=mock_auth)
+                result = tool.execute(action="categorize_and_label")
+
+                assert result.success is True
+                assert "etiketlendi" in result.message
+                assert "Finans" in result.message
+                assert "Sosyal Medya" in result.message
+                assert result.message.endswith("efendim.")
+                assert "categories" in result.data
+                assert result.data["categories"]["Finans"] == 1
+                assert result.data["categories"]["Sosyal Medya"] == 1
+                # POST yapıldı (modify veya label oluşturma)
+                assert mock_post.called
+
