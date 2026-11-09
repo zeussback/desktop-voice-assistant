@@ -108,3 +108,62 @@ class TestGoogleAuthManager:
                 mock_creds.refresh.assert_called_once()
                 assert creds is not None
                 assert creds.token == "refreshed_token_999"
+
+    def test_authenticate_interactive_missing_credentials_file(self, tmp_path):
+        """credentials.json dosyası yokken False döner."""
+        manager = GoogleAuthManager(credentials_path=tmp_path / "nonexistent.json")
+        assert manager.authenticate_interactive() is False
+
+    def test_authenticate_interactive_invalid_config(self, tmp_path):
+        """credentials.json geçersiz veya eksik yapılandırma içerirken False döner."""
+        creds_file = tmp_path / "credentials.json"
+        creds_file.write_text(json.dumps({"invalid_key": {}}), encoding="utf-8")
+
+        manager = GoogleAuthManager(credentials_path=creds_file)
+        assert manager.authenticate_interactive() is False
+
+    def test_authenticate_interactive_success(self, tmp_path):
+        """Mock edilmiş HTTP sunucu ve token takası ile başarıyla token.json oluşturur."""
+        creds_file = tmp_path / "credentials.json"
+        token_file = tmp_path / "token.json"
+
+        creds_content = {
+            "installed": {
+                "client_id": "mock_client_id_123",
+                "client_secret": "mock_secret_456",
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        }
+        creds_file.write_text(json.dumps(creds_content), encoding="utf-8")
+
+        manager = GoogleAuthManager(credentials_path=creds_file, token_path=token_file)
+
+        mock_server = MagicMock()
+        mock_server.server_address = ("127.0.0.1", 8088)
+        mock_server.auth_code = "sample_authorization_code_xyz"
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "access_token": "ya29.new_access_token",
+            "refresh_token": "1//new_refresh_token",
+        }
+
+        mock_creds = MagicMock()
+        mock_creds.valid = True
+
+        with patch("http.server.HTTPServer", return_value=mock_server):
+            with patch("webbrowser.open"):
+                with patch("requests.post", return_value=mock_resp) as mock_post:
+                    with patch("google.oauth2.credentials.Credentials.from_authorized_user_file", return_value=mock_creds):
+                        success = manager.authenticate_interactive(port=8088, open_browser=False)
+
+        assert success is True
+        assert token_file.exists()
+        saved_data = json.loads(token_file.read_text(encoding="utf-8"))
+        assert saved_data["token"] == "ya29.new_access_token"
+        assert saved_data["refresh_token"] == "1//new_refresh_token"
+        assert saved_data["client_id"] == "mock_client_id_123"
+        mock_post.assert_called_once()
+
