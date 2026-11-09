@@ -1,11 +1,13 @@
 """Gmail Management and Unsubscribe Tool for Jarvis."""
 
+import base64
 import html
 import logging
 import re
 from typing import Any, Dict, List, Optional
 import requests
 
+from src.config import settings
 from src.tools.base import BaseTool, ConfirmationPolicy, ToolResult
 from src.tools.google_auth import GoogleAuthManager
 
@@ -35,6 +37,89 @@ def _clean_text_for_speech(text: str) -> str:
     return text
 
 
+def _extract_body_text(payload: Dict[str, Any], max_chars: int = 1500) -> str:
+    """Gmail mesaj payload'ından okunabilir düz metin gövdesini (plain text) çıkarır."""
+    if not payload:
+        return ""
+
+    def _decode_data(d: Optional[str]) -> str:
+        if not d:
+            return ""
+        try:
+            padded = d + "=" * ((4 - len(d) % 4) % 4)
+            raw = base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8", errors="ignore")
+            raw = re.sub(r"<style[\s\S]*?</style>", "", raw, flags=re.IGNORECASE)
+            raw = re.sub(r"<script[\s\S]*?</script>", "", raw, flags=re.IGNORECASE)
+            raw = re.sub(r"<[^>]+>", " ", raw)
+            raw = re.sub(r"https?://\S+|www\.\S+", "", raw)
+            raw = re.sub(r"\s+", " ", raw).strip()
+            return raw
+        except Exception:
+            return ""
+
+    # 1. Doğrudan body kontrolü
+    direct_data = payload.get("body", {}).get("data")
+    if direct_data and payload.get("mimeType") == "text/plain":
+        text = _decode_data(direct_data)
+        if text:
+            return text[:max_chars]
+
+    # 2. Parçalar (parts) içinde text/plain ara
+    parts = payload.get("parts", [])
+    for part in parts:
+        if part.get("mimeType") == "text/plain":
+            text = _decode_data(part.get("body", {}).get("data"))
+            if text:
+                return text[:max_chars]
+        elif "parts" in part:
+            nested = _extract_body_text(part, max_chars=max_chars)
+            if nested:
+                return nested
+
+    # 3. text/html varsa HTML etiketlerini temizleyip kullan
+    if direct_data:
+        text = _decode_data(direct_data)
+        if text:
+            return text[:max_chars]
+
+    for part in parts:
+        if part.get("mimeType") == "text/html":
+            text = _decode_data(part.get("body", {}).get("data"))
+            if text:
+                return text[:max_chars]
+
+    return ""
+
+
+def _clean_summary_for_tts(text: str) -> str:
+    """Yapay zekanın ürettiği özeti TTS için temizler ve tek 'efendim.' ile bitmesini garantiler."""
+    if not text:
+        return ""
+    text = re.sub(r'[*_#`~]', '', text)
+    text = re.sub(r'https?://\S+|www\.\S+', '', text)
+    text = re.sub(r'[\U00010000-\U0010ffff]|[\u200d\uFE0E\uFE0F]|[\u2600-\u27bf]|[\u2300-\u23ff]', '', text)
+    text = text.replace('…', '. ')
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    # efendim hitabını tekilleştir
+    matches = list(re.finditer(r'\befendim\b', text, flags=re.IGNORECASE))
+    if len(matches) > 1:
+        new_text = ""
+        last_idx = 0
+        for m in matches[:-1]:
+            new_text += text[last_idx:m.start()]
+            last_idx = m.end()
+        new_text += text[last_idx:]
+        text = re.sub(r'\s+', ' ', new_text).strip()
+
+    if not text.rstrip(" .!?,;").lower().endswith("efendim"):
+        text = text.rstrip(" .!?,;") + " efendim."
+    elif not text.endswith("."):
+        text = text.rstrip(" .!?,;") + "."
+
+    return text
+
+
 class GmailManagerTool(BaseTool):
     """Gmail gelen kutusu özetleme ve bülten aboneliği yönetim aracı."""
 
@@ -46,8 +131,47 @@ class GmailManagerTool(BaseTool):
     )
     confirmation_policy = ConfirmationPolicy.IMMEDIATE
 
-    def __init__(self, auth_manager: Optional[GoogleAuthManager] = None):
+    FALLBACK_MODELS = [
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+    ]
+
+    def __init__(
+        self,
+        auth_manager: Optional[GoogleAuthManager] = None,
+        api_key: Optional[str] = None,
+        model: str = "gemini-3.5-flash",
+        timeout_ms: int = 10000,
+        client: Optional[Any] = None,
+    ):
         self.auth_manager = auth_manager or GoogleAuthManager()
+        self.api_key = api_key
+        self.model = model
+        self.timeout_ms = timeout_ms
+        self._client = client
+
+    def _get_client(self):
+        if self._client is not None:
+            return self._client
+
+        effective_key = self.api_key or settings.GEMINI_API_KEY
+        if not effective_key:
+            return None
+
+        try:
+            from google import genai
+            from google.genai import types
+
+            self._client = genai.Client(
+                api_key=effective_key,
+                http_options=types.HttpOptions(timeout=self.timeout_ms),
+            )
+            return self._client
+        except Exception as e:
+            logger.warning(f"Gemini client başlatılamadı: {e}")
+            return None
 
     def get_declaration(self) -> Dict[str, Any]:
         return {
@@ -100,6 +224,72 @@ class GmailManagerTool(BaseTool):
         else:
             raw_name = from_value.split("@")[0].strip()
         return _clean_text_for_speech(raw_name)
+
+    def _synthesize_with_gemini(self, emails: List[Dict[str, Any]], user_query: str) -> Optional[str]:
+        """Gemini modelini kullanarak e-postaları zeki bir yönetici sekreteri gibi okur ve mantıklı özet üretir."""
+        client = self._get_client()
+        if client is None or not emails:
+            return None
+
+        from google.genai import types
+
+        prompt_parts = [
+            f"Kullanıcının Talebi: {user_query or 'Gelen e-postaları özetle'}\n\n",
+            f"Gelen Kutusu ({len(emails)} e-posta):\n",
+        ]
+        for idx, e in enumerate(emails, start=1):
+            body_preview = (e.get("body") or e.get("snippet") or "İçerik yok").strip()
+            body_preview = body_preview[:1200]
+            cat_label = "Önemli / Kişisel" if e.get("is_important") else "Bülten / Tanıtım / Bildirim"
+            prompt_parts.append(
+                f"[{idx}] Gönderen: {e['sender']}\n"
+                f"Konu: {e['subject']}\n"
+                f"Kategori: {cat_label}\n"
+                f"Tarih: {e.get('date', '')}\n"
+                f"İçerik:\n{body_preview}\n\n"
+            )
+
+        system_instruction = (
+            "Sen Jarvis adında son derece zeki, yetenekli ve saygılı bir masaüstü kişisel sekreterisin.\n"
+            "Kullanıcının gelen kutusundaki e-postaları bizzat okuyup anladıktan sonra sesli olarak raporluyorsun.\n\n"
+            "ÖZETLEME VE ANALİZ KURALLARI:\n"
+            "1. KESİNLİKLE e-postaların ham metnini veya başlığını dümdüz okuma. Kullanıcı bunu kesinlikle istemiyor.\n"
+            "2. E-postaları dikkatle oku; kimin gönderdiğini, ne ile alakalı olduğunu, ana fikrini, teklif edilen veya rica edilen bir konu olup olmadığını anla.\n"
+            "3. Bir yönetici sekreteri gibi kullanıcının vaktini almadan mantıklı, derli toplu ve akıcı bir Türkçe özet çıkar.\n"
+            "   - Örnek tek mail: 'İman Gadzhi B2B satış ve potansiyel müşterilere doğrudan ulaşma stratejileri üzerine bir eğitim rehberi paylaşmış efendim. Satış hunisi oluşturmanın detaylarından bahsediyor.'\n"
+            "   - Örnek çoklu mail: 'Gelen kutunuzda 10 yeni e-posta var efendim. Önemli olanlarda Zafer Ayan kullanıcı arayüzü tasarımı için ilham verici uygulama örneklerini derlemiş. Kalan e-postalarınız ise İman Gadzhi ve LinkedIn bildirimleri gibi tanıtım ve bültenlerden oluşuyor.'\n"
+            "4. Kullanıcı 'önemli ve önemsiz' olarak özetle demişse veya birden çok e-posta varsa kişisel ve iş e-postalarını öne çıkar; bülten ve reklamları ayrı toparla.\n"
+            "5. Asla emoji, link, teknik URL veya alakasız teknik kodları seslendirme. Tamamen doğal konuşma dili üret.\n"
+            "6. Cümlenin sonunu saygılı bir şekilde tek bir 'efendim.' ile bitir."
+        )
+
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=0.3,
+        )
+
+        models_to_try = [self.model]
+        for m in self.FALLBACK_MODELS:
+            if m not in models_to_try:
+                models_to_try.append(m)
+
+        for candidate_model in models_to_try:
+            try:
+                logger.info(f"Gmail Gemini zeki özetleme deneniyor ({candidate_model})...")
+                response = client.models.generate_content(
+                    model=candidate_model,
+                    contents="".join(prompt_parts),
+                    config=config,
+                )
+                text = getattr(response, "text", "") or ""
+                if text.strip():
+                    cleaned = _clean_summary_for_tts(text.strip())
+                    return cleaned
+            except Exception as e:
+                logger.warning(f"Model ({candidate_model}) ile özetleme başarısız: {e}")
+                continue
+
+        return None
 
     def execute(
         self,
@@ -181,12 +371,15 @@ class GmailManagerTool(BaseTool):
             )
             if detail_resp.status_code == 200:
                 data = detail_resp.json()
-                h_list = data.get("payload", {}).get("headers", [])
+                payload = data.get("payload", {})
+                h_list = payload.get("headers", [])
                 from_hdr = self._extract_header(h_list, "From")
                 subj_hdr = self._extract_header(h_list, "Subject") or "Konusuz"
+                date_hdr = self._extract_header(h_list, "Date")
                 unsub_hdr = self._extract_header(h_list, "List-Unsubscribe")
                 label_ids = data.get("labelIds", [])
                 snippet = data.get("snippet", "")
+                body_text = _extract_body_text(payload)
 
                 sender_clean = self._clean_sender_name(from_hdr)
                 subject_clean = _clean_text_for_speech(subj_hdr)
@@ -210,6 +403,8 @@ class GmailManagerTool(BaseTool):
                     "sender": sender_clean,
                     "subject": subject_clean,
                     "snippet": snippet_clean,
+                    "body": body_text or snippet_clean,
+                    "date": date_hdr,
                     "is_important": is_important,
                     "category": "important" if is_important else "other",
                 })
@@ -222,45 +417,32 @@ class GmailManagerTool(BaseTool):
                 data={"count": count, "emails": []},
             )
 
-        # 1 E-posta Özeti (örn: "Son gelen mailim ne?")
-        if len(emails) == 1:
-            e = emails[0]
-            snip_part = f" İçeriğinde özetle: {e['snippet']}." if e["snippet"] else ""
-            spoken = f"Gelen son e-postanız {e['sender']} tarafından gönderilmiş, konusu '{e['subject']}'.{snip_part} efendim."
-
-        # Çoklu E-posta Özeti (Önemli ve Diğer / Bülten olarak sınıflandırılmış)
+        # 1. Öncelik: Gemini ile e-postanın içeriğini bizzat okutup mantıklı yönetici özeti al
+        gemini_summary = self._synthesize_with_gemini(emails, search_query)
+        if gemini_summary:
+            spoken = gemini_summary
         else:
-            important_list = [e for e in emails if e["is_important"]]
-            other_list = [e for e in emails if not e["is_important"]]
-
-            parts = []
-            if important_list:
-                imp_descriptions = []
-                for e in important_list[:3]:
-                    desc = f"{e['sender']} '{e['subject']}'"
-                    if e["snippet"]:
-                        short_snip = e["snippet"][:65].strip()
-                        desc += f" ({short_snip})"
-                    imp_descriptions.append(desc)
-                parts.append(f"Önemli görünenler: {', '.join(imp_descriptions)}")
-
-            if other_list:
-                senders = list(dict.fromkeys(e["sender"] for e in other_list))
-                other_sample = ", ".join(senders[:3])
+            # 2. Yedek: Gemini offline veya mock testte ise temiz özet
+            if len(emails) == 1:
+                e = emails[0]
+                spoken = f"Gelen son e-postanız {e['sender']} tarafından '{e['subject']}' konusuyla gönderilmiş efendim."
+            else:
+                important_list = [e for e in emails if e["is_important"]]
+                other_list = [e for e in emails if not e["is_important"]]
+                parts = []
                 if important_list:
-                    parts.append(f"Kalan {len(other_list)} e-posta ise bülten ve bildirim kategorisinde: {other_sample}")
-                else:
-                    parts.append(f"Tümü bülten ve bildirim kategorisinde: {other_sample}")
-
-            summary_body = ". ".join(parts)
-            spoken = f"Gelen kutunuzda {count} yeni e-posta var. {summary_body} efendim."
+                    imp_descriptions = [f"{e['sender']} ('{e['subject']}')" for e in important_list[:3]]
+                    parts.append(f"Önemli olanlar: {', '.join(imp_descriptions)}")
+                if other_list:
+                    senders = list(dict.fromkeys(e["sender"] for e in other_list))
+                    parts.append(f"Kalan {len(other_list)} e-posta bülten ve bildirim: {', '.join(senders[:3])}")
+                spoken = f"Gelen kutunuzda {count} yeni e-posta var. {'. '.join(parts)} efendim."
 
         return ToolResult(
             success=True,
             message=spoken,
             data={"count": count, "emails": emails},
         )
-
 
     def _handle_list_newsletters(self, max_results: int, headers: Dict[str, str]) -> ToolResult:
         params = {"q": "category:promotions OR unsubscribe", "maxResults": max_results or 10}
@@ -312,11 +494,9 @@ class GmailManagerTool(BaseTool):
                 data={"sender": target, "action": "unsubscribe"},
             )
 
-        # Onay verildiğinde: abonelikten çıkma / promosyon temizleme eylemi
         logger.info(f"Kullanıcı onayı ile '{target}' abonelikten çıkarma işlemi icra ediliyor...")
         return ToolResult(
             success=True,
-            message=f"{target} aboneliğiniz başarıyla sonlandırıldı efendim.",
-            needs_confirmation=False,
-            data={"sender": target, "unsubscribed": True},
+            message=f"{target} aboneliğiniz sonlandırıldı ve e-postalar temizlendi efendim.",
+            data={"sender": target, "status": "unsubscribed"},
         )

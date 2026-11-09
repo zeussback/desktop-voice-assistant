@@ -96,7 +96,7 @@ class TestGmailManagerTool:
             assert len(result.data["emails"]) == 2
 
     def test_gmail_summarize_single_email_with_snippet(self):
-        """Tek bir e-posta olduğunda içerik özeti (snippet) ile birlikte detaylı aktarılır."""
+        """Tek bir e-posta olduğunda Gemini ile zeki yönetici özeti üretilir."""
         mock_auth = MagicMock()
         mock_auth.is_authenticated.return_value = True
         mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer fake_token"}
@@ -124,15 +124,20 @@ class TestGmailManagerTool:
                 return mock_detail_resp
             return mock_list_resp
 
+        mock_gemini_client = MagicMock()
+        mock_gemini_resp = MagicMock()
+        mock_gemini_resp.text = "İman Gadzhi potansiyel müşterilere nasıl ulaşılacağı ve satış stratejileri üzerine bir rehber paylaşmış efendim."
+        mock_gemini_client.models.generate_content.return_value = mock_gemini_resp
+
         with patch("requests.get", side_effect=mock_get):
-            tool = GmailManagerTool(auth_manager=mock_auth)
+            tool = GmailManagerTool(auth_manager=mock_auth, client=mock_gemini_client)
             res = tool.execute(action="summarize_inbox", max_results=1)
 
             assert res.success is True
-            assert "Iman Gadzhi" in res.message
-            assert "today we go and find your customers" in res.message
-            assert "Müşterilerimizi nasıl bulacağımız" in res.message
+            assert "İman Gadzhi" in res.message or "satış" in res.message
             assert res.message.endswith("efendim.")
+            mock_gemini_client.models.generate_content.assert_called_once()
+
 
 
     def test_gmail_summarize_inbox_empty(self):
