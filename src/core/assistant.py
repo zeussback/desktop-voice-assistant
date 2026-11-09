@@ -1,5 +1,6 @@
 """Assistant state machine and orchestrator coordinating Brain, Voice, UI, and Tools."""
 
+from datetime import datetime
 import logging
 import re
 import threading
@@ -21,25 +22,57 @@ Kullanıcı seninle Türkçe konuşuyor.
 Kullanıcıya her zaman saygılı ve samimi bir üslupla "efendim" diye hitap et (örneğin: "Tabii ki efendim", "Hemen bakıyorum efendim", "Nasıl arzu ederseniz efendim").
 Robotik, soğuk ya da kalıplaşmış yapay zeka klişelerinden (örneğin "Ben bir dil modeliyim", "Size bugün nasıl yardımcı olabilirim?" gibi yapmacık kalıplardan) kesinlikle kaçın.
 Karşında bir makine değil; zeki, canlı, sıcakkanlı, hazırcevap ve esprili bir insan varmış hissini ver.
-Yanıtların sesli olarak okunacağı için akıcı, doğal ve özlü (genellikle 1-2 akıcı cümle) olsun; gereksiz uzun paragraflar kurma.
+Yanıtların sesli olarak okunacağı için akıcı, doğal ve özlü olsun; gereksiz uzun paragraflar kurma.
 Markdown yıldızları (*), başlıkları (#) veya karmaşık listelemeler yerine konuşma diline uygun akıcı cümleler kur.
 
 BİLGİSAYAR KONTROLÜ VE ARAÇ KULLANIMI:
-Sistem ayarları (ses, parlaklık, medya), uygulama açma/kapama, web sitelerini açma veya Google aramaları için sana sağlanan araçları (tools) kullan.
+Sistem ayarları (ses, parlaklık, medya), uygulama açma/kapama, web sitelerini açma, Google Takvim veya Gmail işlemleri için sana sağlanan araçları (tools) kullan.
 1. Medya Kontrolü: Kullanıcı 'müziği başlat', 'müziği aç', 'şarkı çal', 'müziği durdur' gibi komutlar verdiğinde 'control_application' DEĞİL, 'control_media' (action='play_pause') aracını kullan.
-2. Çoklu Komutlar: Kullanıcı tek cümlede birden fazla işlem istediğinde (örneğin 'sesi yüzde 80 yap ve youtube'da arama yap'), her iki aracı da arka arkaya çağır (parallel function call).
-3. Araç çağrısı yaptığında doğrudan amaca odaklan ve eylemler bittikten sonra kısa ve doğal bir sesli özet sun.
+2. Çoklu Komutlar: Kullanıcı tek cümlede birden fazla işlem istediğinde, gerekli araçları arka arkaya çağır (parallel function call).
+3. E-Posta ve Ajanda Özetleme Kuralları:
+   - E-posta Özeti: Kullanıcı e-postalarını sorduğunda (örn: 'son gelen mailim ne', 'maillerimi oku'), ASLA sadece kuru başlıkları okuyup geçme! Gönderenin kim olduğunu, konuyu ve e-postanın NE ANLATTIĞINI (içeriğin kısa özetini) akıcı bir dille aktar.
+   - Önem Sınıflandırması: Kullanıcı birden fazla e-posta istediğinde veya 'önemli/önemsiz özetle' dediğinde; kişisel ve iş mesajlarını bülten, reklam ve sosyal medya bildirimlerinden ayırarak özetle.
+   - Sesli Okuma Kuralları: Yanıtlarında asla emoji, Unicode kodları, ham URL bağlantıları veya teknik e-posta formatları kullanma. Yabancı kelimeleri ve kısaltmaları Türkçe konuşma akışına uygun telaffuz edilecek şekilde doğal aktar.
 
-3. ÜSLUP VE HİTAP KURALI:
-- 'efendim' hitabını yanıtında yalnızca BİR KEZ (tercihen cümlenin sonunda veya başında) kullan. Asla her cümlenin sonuna papağan gibi arka arkaya 'efendim' ekleme (örneğin 'Yaptım efendim. Açtım efendim. Başka isteğiniz var mı efendim?' ŞEKLİNDE TEKRAR ETME).
+ÜSLUP VE HİTAP KURALI:
+- 'efendim' hitabını yanıtında yalnızca BİR KEZ (tercihen cümlenin sonunda veya başında) kullan. Asla her cümlenin sonuna papağan gibi arka arkaya 'efendim' ekleme.
 - Birden fazla eylemi özetlerken cümleleri ayrı ayrı kurmak yerine 've' bağlacıyla birbirine bağla (örneğin: 'Sesi yüzde 80 yaptım ve YouTube'u açtım efendim').
 
 ÖNEMLİ FORMAT KURALLARI:
 1. ASLA yanıtına ses zaman damgası (örneğin 00:01, 00:03, 00:06 gibi süreler) veya altyazı zaman kodları ekleme. Yalnızca doğrudan konuşma diline uygun doğal metin üret.
-2. UYGULAMADAN ÇIKIŞ: Kullanıcı uygulamayı veya seni kapatmak, çıkış yapmak ya da vedalaşmak istediğinde (örneğin "kapat", "çık", "uygulamayı kapat", "asistanı kapat", "çıkış yap", "görüşürüz", "hoşça kal", "kendine iyi bak", "bay bay" vb.):
-Samimi ve zarif bir veda cümlesi söyle (örneğin: "Görüşmek üzere efendim, kendinize çok iyi bakın!") ve yanıtının EN SONUNA mutlaka [EXIT] etiketini ekle.
+2. UYGULAMADAN ÇIKIŞ: Kullanıcı uygulamayı veya seni kapatmak, çıkış yapmak ya da vedalaşmak istediğinde:
+Samimi ve zarif bir veda cümlesi söyle ve yanıtının EN SONUNA mutlaka [EXIT] etiketini ekle.
 Örnek: "Görüşmek üzere efendim, kendinize çok iyi bakın! [EXIT]"
 """
+
+DAYS_TR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
+MONTHS_TR = [
+    "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+    "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
+]
+
+
+def get_current_datetime_prompt() -> str:
+    """Yapay zekanın güncel sistem tarih ve saatini bilmesini sağlayan dinamik prompt parçasını döner."""
+    now = datetime.now()
+    day_name = DAYS_TR[now.weekday()]
+    month_name = MONTHS_TR[now.month - 1]
+    formatted = f"{now.day} {month_name} {now.year} {day_name}, Saat: {now.strftime('%H:%M')}"
+    return (
+        f"\n\nGÜNCEL SİSTEM TARİHİ VE ZAMANI:\n"
+        f"Şu anki gerçek sistem zamanı: {formatted}.\n"
+        f"Kullanıcı bugünün tarihini veya saatini sorduğunda, ya da 'bugün', 'yarın', 'bu hafta' gibi zaman planlamaları yaptığında "
+        f"kesinlikle bu güncel tarihi ve saati esas al. Asla kafandan farklı bir tarih, gün ya da yıl uydurma."
+    )
+
+
+EMOJI_PATTERN = re.compile(
+    r"[\U00010000-\U0010ffff]|"
+    r"[\u200d\uFE0E\uFE0F]|"
+    r"[\u2600-\u27bf]|"
+    r"[\u2300-\u23ff]|"
+    r"[\u2b50\u2b55\u2934\u2935\u25aa\u25ab\u25fe\u25fd]"
+)
 
 
 def clean_repeated_efendim(text: str) -> str:
@@ -65,7 +98,7 @@ def clean_repeated_efendim(text: str) -> str:
 
 
 def sanitize_speech_text(text: str) -> str:
-    """TTS ve arayüz için yanıt metninden ses zaman damgalarını (00:03 vb.) ve gereksiz formatları temizler."""
+    """TTS ve arayüz için yanıt metninden ses zaman damgalarını, emojileri ve gereksiz formatları temizler."""
     if not text:
         return ""
     # [EXIT] etiketini temizle
@@ -75,6 +108,24 @@ def sanitize_speech_text(text: str) -> str:
     text = re.sub(r'[\[\(]\s*\d{1,2}:\d{2}\s*[\]\)]', ' ', text)
     # Markdown formatlama yıldızlarını ve başlık işaretlerini temizle (*, **, #, `)
     text = re.sub(r'[\*\_#`]', '', text)
+    # Emojileri temizle (TTS'in garip kod veya harf okumasını engeller)
+    text = EMOJI_PATTERN.sub('', text)
+    # Web adreslerini temizle (TTS'in http:// harf harf okumasını engeller)
+    text = re.sub(r'https?://\S+|www\.\S+', '', text)
+    # Üç nokta ve tire tekrarlarını konuşma duraklamasına dönüştür
+    text = text.replace('…', '. ')
+    text = re.sub(r'\.{2,}', '. ', text)
+    text = re.sub(r'\-{2,}', ' ', text)
+    # Türkçe TTS için sık karşılaşılan kısaltma ve marka telaffuz düzenlemeleri
+    text = re.sub(r'\bUI\b', 'kullanıcı arayüzü', text)
+    text = re.sub(r'\bUX\b', 'kullanıcı deneyimi', text)
+    text = re.sub(r'\bAI\b', 'yapay zeka', text)
+    text = re.sub(r'\bLinkedIn\b', 'Linkdin', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bYouTube\b', 'Yutub', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bGmail\b', 'Gimeyl', text, flags=re.IGNORECASE)
+    # Özel sembolleri düzelt
+    text = text.replace('&', ' ve ')
+    text = text.replace('@', ' ')
     # Tekrarlanan 'efendim' hitaplarını temizle (yalnızca 1 adet bırak)
     text = clean_repeated_efendim(text)
     # Çift boşlukları ve noktalama öncesi boşlukları düzelt
@@ -182,7 +233,7 @@ class AssistantController(QObject):
         try:
             logger.info("Ses verisi işleniyor...")
 
-            active_prompt = SYSTEM_PROMPT
+            active_prompt = SYSTEM_PROMPT + get_current_datetime_prompt()
             if self.pending_confirmation:
                 conf_prompt = self.pending_confirmation.get("prompt", "")
                 active_prompt += (

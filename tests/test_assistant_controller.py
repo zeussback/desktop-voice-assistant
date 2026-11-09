@@ -158,3 +158,24 @@ def test_sanitize_speech_text_removes_repeated_efendim():
     assert "Spotify açıldı efendim." in cleaned
 
 
+def test_sanitize_speech_text_removes_emojis_and_normalizes_abbreviations():
+    """Emojilerin, url adreslerinin temizlendiğini ve kısaltmaların konuşma diline uyarlandığını test eder."""
+    raw = "Zafer AYAN paylaştı: 🤌 UI ilham almalık nefis uygulama listesi… https://linkedin.com/post/123"
+    cleaned = sanitize_speech_text(raw)
+    assert "🤌" not in cleaned
+    assert "https://" not in cleaned
+    assert "kullanıcı arayüzü" in cleaned
+    assert "Zafer AYAN paylaştı:" in cleaned
+
+
+def test_get_current_datetime_prompt_contains_today():
+    """get_current_datetime_prompt fonksiyonunun sistem zamanı ve Türkçe gün/ay içerdiğini test eder."""
+    from src.core.assistant import get_current_datetime_prompt
+    prompt = get_current_datetime_prompt()
+    assert "GÜNCEL SİSTEM TARİHİ VE ZAMANI" in prompt
+    from datetime import datetime
+    year_str = str(datetime.now().year)
+    assert year_str in prompt
+
+
+

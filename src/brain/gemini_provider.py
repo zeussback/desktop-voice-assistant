@@ -137,6 +137,16 @@ class GeminiProvider(BaseBrainProvider):
                             needs_conf = True
                             conf_prompt = res.confirmation_prompt
 
+                    if needs_conf:
+                        return BrainResponse(
+                            text=conf_prompt or results[0].message,
+                            provider="gemini",
+                            tool_called=", ".join(tool_names),
+                            tool_result=results[0].model_dump(),
+                            needs_confirmation=True,
+                            confirmation_prompt=conf_prompt,
+                        )
+
                     combined_messages = format_combined_tool_messages([r.message for r in results if r.message])
                     if len(results) == 1:
                         tool_res_dict = results[0].model_dump()
@@ -145,6 +155,49 @@ class GeminiProvider(BaseBrainProvider):
                             "success": all(r.success for r in results),
                             "results": [r.model_dump() for r in results],
                         }
+
+                    # Zengin içerik sağlayan araçlarda (Gmail, Takvim vb.) Gemini'nin veriyi kullanıcının özel sorusuna göre
+                    # (örn: 'önemli ve önemsiz olacak şekilde özetle', 'ne hakkında olduğunu söyle') doğal dilde özetlemesini sağla
+                    has_rich_data = any(
+                        bool(r.data and any(k in r.data for k in ["emails", "events", "deadlines", "briefing"]))
+                        for r in results
+                    )
+                    candidates = getattr(response, "candidates", None)
+                    if has_rich_data and candidates and candidates[0].content:
+                        try:
+                            function_response_parts = [
+                                types.Part.from_function_response(
+                                    name=call.name,
+                                    response={"result": res.model_dump()},
+                                )
+                                for call, res in zip(function_calls, results)
+                            ]
+
+                            follow_up_contents = [
+                                *contents,
+                                candidates[0].content,
+                                types.Content(role="tool", parts=function_response_parts),
+                            ]
+
+                            logger.info("Gemini araç verisini kullanıcı sorusuna göre sesli özetliyor...")
+                            second_resp = client.models.generate_content(
+                                model=candidate_model,
+                                contents=follow_up_contents,
+                                config=config,
+                            )
+                            second_text = getattr(second_resp, "text", "") or ""
+                            if second_text.strip():
+                                return BrainResponse(
+                                    text=second_text.strip(),
+                                    provider="gemini",
+                                    tool_called=", ".join(tool_names),
+                                    tool_result=tool_res_dict,
+                                    needs_confirmation=False,
+                                )
+                        except Exception as e:
+                            logger.warning(
+                                f"Gemini araç özetleme ikinci turunda hata ({e}), doğrudan araç mesajı kullanılıyor."
+                            )
 
                     return BrainResponse(
                         text=combined_messages.strip(),

@@ -92,6 +92,48 @@ class TestGmailManagerTool:
             assert result.success is True
             assert "Ahmet Yılmaz" in result.message or "Sprint Planlaması" in result.message
             assert result.message.endswith("efendim.")
+            assert "emails" in result.data
+            assert len(result.data["emails"]) == 2
+
+    def test_gmail_summarize_single_email_with_snippet(self):
+        """Tek bir e-posta olduğunda içerik özeti (snippet) ile birlikte detaylı aktarılır."""
+        mock_auth = MagicMock()
+        mock_auth.is_authenticated.return_value = True
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer fake_token"}
+
+        mock_list_resp = MagicMock()
+        mock_list_resp.status_code = 200
+        mock_list_resp.json.return_value = {"messages": [{"id": "single_msg"}]}
+
+        mock_detail_resp = MagicMock()
+        mock_detail_resp.status_code = 200
+        mock_detail_resp.json.return_value = {
+            "id": "single_msg",
+            "snippet": "Müşterilerimizi nasıl bulacağımız hakkında detaylar...",
+            "labelIds": ["INBOX", "UNREAD"],
+            "payload": {
+                "headers": [
+                    {"name": "From", "value": "Iman Gadzhi <iman@agency.com>"},
+                    {"name": "Subject", "value": "today we go and find your customers"},
+                ]
+            },
+        }
+
+        def mock_get(url, **kwargs):
+            if "messages/single_msg" in url:
+                return mock_detail_resp
+            return mock_list_resp
+
+        with patch("requests.get", side_effect=mock_get):
+            tool = GmailManagerTool(auth_manager=mock_auth)
+            res = tool.execute(action="summarize_inbox", max_results=1)
+
+            assert res.success is True
+            assert "Iman Gadzhi" in res.message
+            assert "today we go and find your customers" in res.message
+            assert "Müşterilerimizi nasıl bulacağımız" in res.message
+            assert res.message.endswith("efendim.")
+
 
     def test_gmail_summarize_inbox_empty(self):
         """Gelen kutusu boşken uygun mesaj döner."""
