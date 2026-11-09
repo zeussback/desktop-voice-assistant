@@ -81,6 +81,87 @@
 
 ## Checkpoint: Phase 3 Vision Complete & Full Regression
 - [x] `pytest tests/test_vision.py` testleri 100% geçer.
-- [x] `pytest tests/ -v` ile tüm test süiti (103 test) sıfır regresyon ile yeşil tamamlanır.
+- [x] `pytest tests/ -v` ile tüm test süiti (104 test) sıfır regresyon ile yeşil tamamlanır.
 - [x] Diskte hiçbir geçici ekran görüntüsü dosyası oluşmadığı doğrulanır.
 - [x] Asistan başlatıldığında *"Ekranda ne var?"* dendiğinde anında görme ve seslendirme döngüsü çalışır.
+
+---
+
+## Phase 4: Kişisel Asistan & Sekreterlik (Google Calendar, Deadlines, Gmail & Morning Briefing)
+
+### Task 1: Google API Bağımlılıkları, Güvenlik Yapılandırması & Kimlik Doğrulama Katmanı
+**Description:** `google-api-python-client`, `google-auth-oauthlib`, `google-auth-httplib2`, `python-dateutil` bağımlılıklarını ekler; `.gitignore`'a `credentials.json` ve `token.json` ekler; `src/tools/google_auth.py` içinde `GoogleAuthManager` sınıfını ve servis sağlayıcılarını yazar.
+**Acceptance criteria:**
+- [x] Bağımlılıklar `requirements.txt` dosyasına eklenir.
+- [x] `credentials.json` ve `token.json` `.gitignore` içine eklenerek güvenlik sağlanır.
+- [x] `GoogleAuthManager`, `token.json` varsa otomatik yükler, süresi dolmuşsa `refresh` eder.
+- [x] `credentials.json` bulunamadığında çökmek yerine kullanıcıya anlaşılır sesli rehberlik döner.
+**Verification:**
+- [x] `pytest tests/test_google_auth.py -v` testleri başarıyla geçer.
+**Dependencies:** None
+**Files likely touched:**
+- `requirements.txt`
+- `.gitignore`
+- `src/tools/google_auth.py`
+- `tests/test_google_auth.py`
+**Estimated scope:** Small (3-4 files)
+
+---
+
+### Task 2: Google Calendar & Teslim Tarihi Yönetimi (`GoogleCalendarTool` / `manage_calendar`)
+**Description:** Google Calendar v3 API'si ile entegre `GoogleCalendarTool` sınıfını oluşturur; toplantı/etkinlik ekleme, günün ajandasını listeleme, `[Son Tarih]` etiketli teslim tarihlerini ekleme ve sorgulama yeteneklerini sağlar.
+**Acceptance criteria:**
+- [x] `manage_calendar` aracı `list_events`, `add_event`, `list_deadlines`, `add_deadline` eylemlerini destekler.
+- [x] Tarih ve saatler RFC 3339 formatında doğru işlenir.
+- [x] Teslim tarihleri Google Takvim'de `[Son Tarih]` etiketiyle saklanır ve *"Yarına ne yetişmeli?"*, *"3 gün sonraya ne var?"* sorgularında doğru filtrelenir.
+- [x] `create_default_tool_registry()` fabrikasına kaydedilir.
+**Verification:**
+- [x] `pytest tests/test_google_calendar.py -v` testleri başarıyla geçer.
+**Dependencies:** Task 1
+**Files likely touched:**
+- `src/tools/google_calendar.py`
+- `src/tools/__init__.py`
+- `tests/test_google_calendar.py`
+**Estimated scope:** Medium (3-4 files)
+
+---
+
+### Task 3: Gmail Yönetimi & Sesli Teyitli Abonelikten Çıkma (`GmailManagerTool` / `manage_gmail`)
+**Description:** Gmail v1 API'si ile entegre `GmailManagerTool` sınıfını oluşturur; son 24 saatteki önemli/okunmamış mailleri 1-2 cümlede sesli özetler, `List-Unsubscribe` başlığına sahip bültenleri tespit eder ve sesli onay alındığında (`ConfirmationPolicy.REQUIRE_CONFIRMATION`) abonelikten çıkar.
+**Acceptance criteria:**
+- [x] `manage_gmail` aracı `summarize_inbox`, `list_newsletters`, `unsubscribe` eylemlerini destekler.
+- [x] `summarize_inbox` okunmamış mailleri Piper TTS için net, kısa bir Türkçe özete dönüştürür.
+- [x] `unsubscribe` eylemi teyitsiz çalıştırıldığında `needs_confirmation=True` ve sesli teyit sorusu üretir.
+- [x] `create_default_tool_registry()` fabrikasına kaydedilir.
+**Verification:**
+- [x] `pytest tests/test_gmail.py -v` testleri başarıyla geçer.
+**Dependencies:** Task 1
+**Files likely touched:**
+- `src/tools/gmail_manager.py`
+- `src/tools/__init__.py`
+- `tests/test_gmail.py`
+**Estimated scope:** Medium (3-4 files)
+
+---
+
+### Task 4: Sabah Brifingi & Ajanda Birleştirici (`MorningBriefingTool` / `get_morning_briefing`)
+**Description:** Kullanıcı *"Günaydın"* veya *"Bugün neyim var?"* dediğinde takvim randevularını, yaklaşan teslim tarihlerini ve acil gelen kutusu durumunu tek bir akıcı 2-3 cümlelik sesli brifinge dönüştüren `MorningBriefingTool` aracını oluşturur.
+**Acceptance criteria:**
+- [x] `get_morning_briefing` aracı bugünün takvimini, 3 günlük teslim tarihlerini ve önemli okunmamış e-postaları sorgulayıp birleştirir.
+- [x] Çıktı doğrudan seslendirmeye uygun, kod/markdown içermeyen akıcı Türkçe ve tek bir *"efendim"* ile tamamlanır.
+- [x] `create_default_tool_registry()` fabrikasına kaydedilir.
+**Verification:**
+- [x] `pytest tests/test_morning_briefing.py -v` testleri başarıyla geçer.
+**Dependencies:** Tasks 1, 2, 3
+**Files likely touched:**
+- `src/tools/morning_briefing.py`
+- `src/tools/__init__.py`
+- `tests/test_morning_briefing.py`
+**Estimated scope:** Small (3 files)
+
+---
+
+## Checkpoint: Phase 4 Secretary Complete & Full Regression
+- [x] `pytest tests/test_google_auth.py tests/test_google_calendar.py tests/test_gmail.py tests/test_morning_briefing.py -v` testleri 100% geçer.
+- [x] `pytest tests/ -v` ile tüm test süiti (131 test) sıfır regresyon ile yeşil tamamlanır.
+- [x] Kullanıcı sesli olarak takvime etkinlik/deadline ekleyebilir, gelen kutusunu özetletebilir ve sabah brifingi alabilir.

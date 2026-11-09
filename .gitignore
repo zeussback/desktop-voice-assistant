@@ -16,6 +16,8 @@ models/
 
 # Environment Variables & Secrets
 .env
+credentials.json
+token.json
 
 # Graphify
 graphify-out/

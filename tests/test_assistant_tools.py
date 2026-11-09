@@ -52,6 +52,9 @@ def test_create_default_tool_registry():
         "control_application",
         "control_system_power",
         "inspect_screen",
+        "manage_calendar",
+        "manage_gmail",
+        "get_morning_briefing",
     ]
     for exp in expected:
         assert exp in tools

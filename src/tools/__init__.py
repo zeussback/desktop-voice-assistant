@@ -13,6 +13,9 @@ def create_default_tool_registry() -> ToolRegistry:
     from src.tools.app_control import AppControlTool
     from src.tools.system_power import SystemPowerTool
     from src.tools.screen_inspection import ScreenInspectionTool
+    from src.tools.google_calendar import GoogleCalendarTool
+    from src.tools.gmail_manager import GmailManagerTool
+    from src.tools.morning_briefing import MorningBriefingTool
 
     registry = ToolRegistry()
     registry.register(SystemAudioTool())
@@ -22,6 +25,9 @@ def create_default_tool_registry() -> ToolRegistry:
     registry.register(AppControlTool())
     registry.register(SystemPowerTool())
     registry.register(ScreenInspectionTool())
+    registry.register(GoogleCalendarTool())
+    registry.register(GmailManagerTool())
+    registry.register(MorningBriefingTool())
     return registry
 
 
@@ -32,4 +38,7 @@ __all__ = [
     "ToolRegistry",
     "create_default_tool_registry",
     "ScreenInspectionTool",
+    "GoogleCalendarTool",
+    "GmailManagerTool",
+    "MorningBriefingTool",
 ]

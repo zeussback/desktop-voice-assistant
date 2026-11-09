@@ -12,24 +12,62 @@ from src.tools.base import BaseTool, ConfirmationPolicy, ToolResult
 logger = logging.getLogger(__name__)
 
 
+def _capture_with_qscreen(max_width: int = 1920, max_height: int = 1080, quality: int = 85) -> bytes:
+    """PySide6 QScreen ile ekran görüntüsü yakalar (Windows DWM / Qt yerel köprüsü)."""
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtCore import QBuffer, QIODevice, Qt
+
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+
+    screen = QGuiApplication.primaryScreen()
+    if not screen:
+        raise RuntimeError("Birincil ekran aygıtı bulunamadı.")
+
+    pixmap = screen.grabWindow(0)
+    if pixmap.isNull() or pixmap.width() == 0:
+        raise RuntimeError("Ekran görüntüsü yakalanamadı (boş pixmap).")
+
+    if pixmap.width() > max_width or pixmap.height() > max_height:
+        pixmap = pixmap.scaled(
+            max_width,
+            max_height,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
+    buffer = QBuffer()
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    if not pixmap.save(buffer, "JPEG", quality=quality):
+        raise RuntimeError("Ekran görüntüsü JPEG formatına dönüştürülemedi.")
+
+    return bytes(buffer.data())
+
+
 def capture_screen_bytes(max_width: int = 1920, max_height: int = 1080, quality: int = 85) -> bytes:
     """Birincil ekran görüntüsünü yakalar, gerekiyorsa ölçeklendirir ve RAM içinde JPEG baytları olarak döner.
     
-    Hiçbir dosya diske yazılmaz; tamamen bellek içi (io.BytesIO) çalışır.
+    Önce Pillow ImageGrab'i dener; Windows oturum sınırlamalarında PySide6 QScreen yedeğine geçer.
+    Hiçbir dosya diske yazılmaz; tamamen bellek içi (io.BytesIO / QBuffer) çalışır.
     """
-    img = ImageGrab.grab(all_screens=False)
+    try:
+        img = ImageGrab.grab(all_screens=False)
+        # En-boy oranını koruyarak maksimum boyutlara sığacak şekilde ölçekle
+        if img.width > max_width or img.height > max_height:
+            img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
 
-    # En-boy oranını koruyarak maksimum boyutlara sığacak şekilde ölçekle
-    if img.width > max_width or img.height > max_height:
-        img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+        # JPEG için RGB moduna dönüştür
+        if img.mode != "RGB":
+            img = img.convert("RGB")
 
-    # JPEG için RGB moduna dönüştür
-    if img.mode != "RGB":
-        img = img.convert("RGB")
-
-    buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=quality, optimize=True)
-    return buffer.getvalue()
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=quality, optimize=True)
+        return buffer.getvalue()
+    except Exception as pil_err:
+        logger.debug(f"Pillow ekran yakalama başarısız ({pil_err}), PySide6 yerel ekran yakalaması deneniyor...")
+        return _capture_with_qscreen(max_width=max_width, max_height=max_height, quality=quality)
 
 
 def clean_vision_text_for_tts(text: str) -> str:
@@ -207,7 +245,12 @@ class ScreenInspectionTool(BaseTool):
                     )
                     continue
                 else:
-                    raise e
+                    logger.error(f"Vision API çağrısı sırasında hata ({candidate_model}): {e}")
+                    return ToolResult(
+                        success=False,
+                        message="Ekran analiz edilirken bir bağlantı hatası oluştu efendim.",
+                        data={"error": str(e)},
+                    )
 
         logger.error(f"Tüm Gemini Vision modelleri tükendi: {last_error}")
         return ToolResult(

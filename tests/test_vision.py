@@ -52,10 +52,19 @@ class TestScreenCaptureBytes:
                 assert decoded.format == "JPEG"
 
     def test_capture_screen_bytes_raises_on_error(self):
-        """Ekran yakalama esnasında hata oluşursa hatanın fırlatıldığını doğrular."""
+        """Ekran yakalama esnasında her iki yöntem de hata verirse hatanın fırlatıldığını doğrular."""
         with patch("PIL.ImageGrab.grab", side_effect=RuntimeError("Kilitli ekran")):
-            with pytest.raises(RuntimeError, match="Kilitli ekran"):
-                capture_screen_bytes()
+            with patch("src.tools.screen_inspection._capture_with_qscreen", side_effect=RuntimeError("Kilitli ekran")):
+                with pytest.raises(RuntimeError, match="Kilitli ekran"):
+                    capture_screen_bytes()
+
+    def test_capture_screen_bytes_falls_back_to_qscreen(self):
+        """Pillow grab başarısız olduğunda PySide6 QScreen yedeğinin çalıştığını doğrular."""
+        with patch("PIL.ImageGrab.grab", side_effect=OSError("screen grab failed")):
+            with patch("src.tools.screen_inspection._capture_with_qscreen", return_value=b"\xff\xd8qscreen") as mock_qscreen:
+                result = capture_screen_bytes()
+                assert result == b"\xff\xd8qscreen"
+                mock_qscreen.assert_called_once()
 
 
 class TestScreenInspectionTool:
