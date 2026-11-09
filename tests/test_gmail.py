@@ -238,7 +238,9 @@ class TestGmailManagerTool:
         assert _determine_category("AWS Billing", "November Invoice", "") == "Finans"
         assert _determine_category("Turkcell Fatura", "Kasım Ayı Faturanız", "") == "Finans"
 
-        # Sosyal Medya
+        # Sosyal Medya (özellikle Pinterest ve 'e-posta/gibi' içeren durumlar)
+        assert _determine_category("Pinterest <updates@pinterest.com>", "Günün fikirleri gibi harika pinler", "e-posta bildirimleri") == "Sosyal Medya"
+        assert _determine_category("Pinterest", "Yeni pin ve panolar", "postlar") == "Sosyal Medya"
         assert _determine_category("LinkedIn Updates", "Zafer AYAN paylaştı", "") == "Sosyal Medya"
         assert _determine_category("YouTube", "Yeni video yüklendi", "", ["CATEGORY_SOCIAL"]) == "Sosyal Medya"
 

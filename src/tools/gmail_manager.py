@@ -93,6 +93,17 @@ def _extract_body_text(payload: Dict[str, Any], max_chars: int = 1500) -> str:
     return ""
 
 
+JARVIS_CATEGORIES = [
+    "Sosyal Medya",
+    "Alışveriş & Kargo",
+    "Finans",
+    "Eğitim & Gelişim",
+    "İş & Proje",
+    "Bülten & Tanıtım",
+    "Kişisel",
+]
+
+
 def _determine_category(
     sender: str,
     subject: str,
@@ -100,63 +111,91 @@ def _determine_category(
     label_ids: Optional[List[str]] = None,
 ) -> str:
     """E-postanın gönderen, konu ve içerik bilgilerine göre semantik kategorisini belirler."""
-    combined = f"{sender} {subject} {snippet}".lower()
+    sender_lower = (sender or "").lower()
+    subject_lower = (subject or "").lower()
+    snippet_lower = (snippet or "").lower()
+    combined = f"{sender_lower} {subject_lower} {snippet_lower}"
     labels = label_ids or []
 
-    # 1. Finans (Banka, fatura, ödeme, dekont, ekstre, POS, para transferi)
-    finance_keywords = [
-        "bank", "fatura", "ödeme", "odeme", "dekont", "ekstre", "hesap özeti", "kredi kartı",
-        "garanti", "isbank", "iş bankası", "yapı kredi", "akbank", "ziraat", "qnb",
-        "enpara", "papara", "halkbank", "vakıfbank", "pos", "iban", "havale", "eft",
-        "tahsilat", "aws billing", "invoice", "receipt", "kripto", "binance", "vergi", "gib",
-        "turkcell fatura", "vodafone fatura", "türk telekom fatura", "enerjisa", "iski",
-        "ödendi", "ödeme alındı", "payment"
+    # 1. Sosyal Medya (Pinterest, LinkedIn, Twitter/X, Instagram, YouTube, Reddit, Discord vb.)
+    social_platforms = [
+        "pinterest", "linkedin", "twitter", "x.com", "instagram", "facebook", "youtube",
+        "tiktok", "reddit", "threads.net", "threads", "discord", "medium.com", "quora"
     ]
-    if any(k in combined for k in finance_keywords):
-        return "Finans"
-
-    # 2. Sosyal Medya (LinkedIn, X, Instagram, YouTube, Facebook, Reddit, vb.)
-    social_keywords = [
-        "linkedin", "twitter", "instagram", "facebook", "youtube", "tiktok", "reddit",
-        "pinterest", "threads", "discord", "paylaştı:", "bağlantı kurdu", "ağınızda",
-        "takip etti", "kanalıma abone", "bildirim:", "sosyal medya", "social"
-    ]
-    if any(k in combined for k in social_keywords) or "CATEGORY_SOCIAL" in labels:
+    if any(p in sender_lower or p in subject_lower for p in social_platforms):
         return "Sosyal Medya"
 
-    # 3. Alışveriş & Kargo (Sipariş, kargo takibi, e-ticaret)
-    shopping_keywords = [
-        "sipariş", "siparis", "kargo", "teslimat", "trendyol", "hepsiburada", "amazon.com.tr",
-        "yemeksepeti", "getir", "yurtiçi kargo", "aras kargo", "mng kargo", "sürat kargo",
-        "ptt kargo", "kargonuz yola çıktı", "siparişiniz alındı", "order confirmed", "tracking"
+    social_patterns = [
+        r"\b(pin|pinler|pano|panosu|bağlantı kurdu|paylaştı|takip etti|ağınızda|abone oldu)\b",
+        r"\b(yeni gönderi|sosyal medya|bildirim)\b",
     ]
-    if any(k in combined for k in shopping_keywords):
+    if any(re.search(pat, combined, re.IGNORECASE) for pat in social_patterns) or "CATEGORY_SOCIAL" in labels:
+        return "Sosyal Medya"
+
+    # 2. Alışveriş & Kargo (Sipariş, kargo takibi, e-ticaret)
+    shopping_platforms = [
+        "trendyol", "hepsiburada", "amazon", "yemeksepeti", "getir", "migros",
+        "yurtiçi kargo", "aras kargo", "mng kargo", "sürat kargo", "ptt kargo", "kargoist",
+        "aliexpress", "zara", "boyner"
+    ]
+    if any(p in sender_lower for p in shopping_platforms):
         return "Alışveriş & Kargo"
 
-    # 4. Eğitim & Gelişim (Kurs, webinar, gelişim, eğitim rehberleri)
-    education_keywords = [
-        "eğitim", "egitim", "kurs", "webinar", "seminar", "rehber", "guide", "gelişim",
-        "öğren", "udemy", "coursera", "iman gadzhi", "training", "ders", "masterclass"
+    shopping_patterns = [
+        r"\b(siparişiniz|sipariş|kargonuz|kargo takip|teslim edildi|teslimat|yola çıktı)\b",
+        r"\b(order confirmed|shipped|delivery tracking)\b",
     ]
-    if any(k in combined for k in education_keywords):
+    if any(re.search(pat, combined, re.IGNORECASE) for pat in shopping_patterns):
+        return "Alışveriş & Kargo"
+
+    # 3. Finans (Banka, fatura, ödeme, dekont, ekstre - KESİN KELİME SINIRLARI İLE)
+    finance_senders = [
+        "garanti", "isbank", "iş bankası", "yapı kredi", "akbank", "ziraat", "qnb",
+        "enpara", "papara", "halkbank", "vakıfbank", "fibabanka", "denizbank",
+        "turkcell fatura", "vodafone fatura", "türk telekom fatura", "enerjisa", "iski",
+        "aws billing", "stripe", "paypal", "gib.gov.tr"
+    ]
+    if any(f in sender_lower for f in finance_senders):
+        return "Finans"
+
+    finance_patterns = [
+        r"\b(hesap özeti|hesap ekstresi|kredi kartı|kredi kartınız|dekont|dekontu|ekstre|ekstreniz)\b",
+        r"\b(fatura|faturanız|faturası|e-fatura|ödeme alındı|ödemeniz|tahsilat|ödendi)\b",
+        r"\b(iban|havale|eft|para transferi|invoice|receipt|banka dekontu)\b",
+        r"\b(kripto|binance|btcturk|paribu)\b",
+    ]
+    if any(re.search(pat, combined, re.IGNORECASE) for pat in finance_patterns):
+        return "Finans"
+
+    # 4. Eğitim & Gelişim (Kurs, webinar, gelişim, eğitim rehberleri)
+    education_senders = ["udemy", "coursera", "iman gadzhi", "edx", "khan academy", "btk akademi"]
+    if any(e in sender_lower for e in education_senders):
         return "Eğitim & Gelişim"
 
-    # 5. Bülten & Tanıtım (Pazarlama, indirim, promosyon)
-    promo_keywords = [
-        "indirim", "fırsat", "kampanya", "bülten", "newsletter", "promosyon", "özel teklif",
-        "unsubscribe", "abonelikten çık", "reklam"
+    education_patterns = [
+        r"\b(eğitim|kurs|kursu|webinar|seminar|sertifika|masterclass|rehber|training guide)\b",
     ]
-    if any(k in combined for k in promo_keywords) or "CATEGORY_PROMOTIONS" in labels:
-        return "Bülten & Tanıtım"
+    if any(re.search(pat, combined, re.IGNORECASE) for pat in education_patterns):
+        return "Eğitim & Gelişim"
 
-    # 6. İş & Proje (Sprint, toplantı, müşteri, iş teklifi, kod)
-    work_keywords = [
-        "sprint", "proje", "toplantı", "meeting", "görüşme", "sunum", "sözleşme", "teklif",
-        "müşteri", "yazılım", "github", "gitlab", "jira", "pull request", "kod inceleme",
-        "task", "deadline", "iş birliği"
-    ]
-    if any(k in combined for k in work_keywords):
+    # 5. İş & Proje (Sprint, toplantı, müşteri, iş teklifi, kod)
+    work_senders = ["github", "gitlab", "jira", "atlassian", "slack", "asana", "trello", "notion"]
+    if any(w in sender_lower for w in work_senders):
         return "İş & Proje"
+
+    work_patterns = [
+        r"\b(sprint|toplantı|toplantısı|meeting|sözleşme|iş teklifi|müşteri görüşmesi)\b",
+        r"\b(pull request|code review|kod incelemesi|task|deadline)\b",
+    ]
+    if any(re.search(pat, combined, re.IGNORECASE) for pat in work_patterns):
+        return "İş & Proje"
+
+    # 6. Bülten & Tanıtım (Pazarlama, indirim, promosyon)
+    promo_patterns = [
+        r"\b(indirim|kampanya|fırsat|fırsatı|promosyon|özel teklif|bülten|newsletter)\b",
+    ]
+    if any(re.search(pat, combined, re.IGNORECASE) for pat in promo_patterns) or "CATEGORY_PROMOTIONS" in labels:
+        return "Bülten & Tanıtım"
 
     # 7. Varsayılan (Kişisel / Bireysel)
     return "Kişisel"
@@ -289,25 +328,47 @@ class GmailManagerTool(BaseTool):
 
         return None
 
-    def _apply_label_to_message(self, message_id: str, label_name: str, headers: Dict[str, str]) -> bool:
-        """Belirtilen e-postaya Gmail etiketi ekler."""
+    def _apply_label_to_message(
+        self,
+        message_id: str,
+        label_name: str,
+        headers: Dict[str, str],
+        existing_label_ids: Optional[List[str]] = None,
+    ) -> bool:
+        """Belirtilen e-postaya doğru Gmail etiketini ekler; varsa eski hatalı kategori etiketlerini kaldırır."""
         if not label_name or not message_id:
             return False
 
-        label_id = self._get_or_create_label_id(label_name, headers)
-        if not label_id:
+        target_label_id = self._get_or_create_label_id(label_name, headers)
+        if not target_label_id:
             return False
+
+        # Varsa önceki hatalı Jarvis kategori etiketlerini temizle
+        remove_label_ids = []
+        for cat_name in JARVIS_CATEGORIES:
+            if cat_name.lower() != label_name.lower():
+                cat_id = self._labels_cache.get(cat_name.lower())
+                if cat_id:
+                    if existing_label_ids is None or cat_id in existing_label_ids:
+                        remove_label_ids.append(cat_id)
+
+        payload: Dict[str, Any] = {"addLabelIds": [target_label_id]}
+        if remove_label_ids:
+            payload["removeLabelIds"] = remove_label_ids
 
         try:
             modify_url = f"{GMAIL_MESSAGES_URL}/{message_id}/modify"
             resp = requests.post(
                 modify_url,
                 headers=headers,
-                json={"addLabelIds": [label_id]},
+                json=payload,
                 timeout=10,
             )
             if resp.status_code == 200:
-                logger.info(f"E-posta ({message_id}) '{label_name}' olarak etiketlendi.")
+                logger.info(
+                    f"E-posta ({message_id}) '{label_name}' olarak güncellendi. "
+                    f"(Kaldırılan eski etiketler: {remove_label_ids})"
+                )
                 return True
         except Exception as e:
             logger.warning(f"E-posta etiketlenirken hata ({message_id} -> {label_name}): {e}")
@@ -552,8 +613,8 @@ class GmailManagerTool(BaseTool):
                     label_ids=label_ids,
                 )
 
-                # Gmail hesabında etiketi oluştur ve e-postaya bas
-                self._apply_label_to_message(msg_id, category_name, headers)
+                # Gmail hesabında etiketi oluştur ve e-postaya bas (varsa eski hatalı etiketi kaldırır)
+                self._apply_label_to_message(msg_id, category_name, headers, existing_label_ids=label_ids)
 
                 is_important = category_name in ("Finans", "İş & Proje", "Kişisel")
 
