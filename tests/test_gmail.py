@@ -333,3 +333,112 @@ class TestGmailManagerTool:
                 # POST yapıldı (modify veya label oluşturma)
                 assert mock_post.called
 
+    def test_gmail_mark_as_read_from_cached_summarized_ids(self):
+        """Son özetlenen e-postaların kimlikleri üzerinden okundu olarak işaretleme testi."""
+        mock_auth = MagicMock()
+        mock_auth.is_authenticated.return_value = True
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer fake_token"}
+
+        mock_post_resp = MagicMock()
+        mock_post_resp.status_code = 200
+        mock_post_resp.json.return_value = {"id": "msg_1", "labelIds": []}
+
+        with patch("requests.post", return_value=mock_post_resp) as mock_post:
+            tool = GmailManagerTool(auth_manager=mock_auth)
+            tool._last_summarized_ids = ["msg_1", "msg_2"]
+
+            result = tool.execute(action="mark_as_read")
+
+            assert result.success is True
+            assert "Özetlenen 2 e-posta" in result.message
+            assert result.message.endswith("efendim.")
+            assert result.data["count"] == 2
+            assert tool._last_summarized_ids == []
+            assert mock_post.call_count == 2
+            # UNREAD etiketinin kaldırıldığını doğrula
+            call_kwargs = mock_post.call_args[1]
+            assert call_kwargs.get("json") == {"removeLabelIds": ["UNREAD"]}
+
+    def test_gmail_mark_as_read_fallback_queries_inbox(self):
+        """Hafızada özet bulunmadığında gelen kutusundaki okunmamış mailleri sorgulayıp okundu yapar."""
+        mock_auth = MagicMock()
+        mock_auth.is_authenticated.return_value = True
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer fake_token"}
+
+        mock_list_resp = MagicMock()
+        mock_list_resp.status_code = 200
+        mock_list_resp.json.return_value = {
+            "messages": [{"id": "msg_unread_1"}]
+        }
+
+        mock_post_resp = MagicMock()
+        mock_post_resp.status_code = 200
+
+        with patch("requests.get", return_value=mock_list_resp):
+            with patch("requests.post", return_value=mock_post_resp) as mock_post:
+                tool = GmailManagerTool(auth_manager=mock_auth)
+                assert tool._last_summarized_ids == []
+
+                result = tool.execute(action="mark_as_read")
+
+                assert result.success is True
+                assert "Belirtilen 1 e-posta" in result.message
+                assert result.message.endswith("efendim.")
+                assert result.data["count"] == 1
+                assert mock_post.called
+
+    def test_gmail_summarize_inbox_auto_marks_as_read_and_caches_ids(self):
+        """summarize_inbox çalıştırıldığında e-postalar otomatik okundu işaretlenir ve ID'leri saklanır."""
+        mock_auth = MagicMock()
+        mock_auth.is_authenticated.return_value = True
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer fake_token"}
+
+        mock_list_resp = MagicMock()
+        mock_list_resp.status_code = 200
+        mock_list_resp.json.return_value = {
+            "messages": [{"id": "msg_auto_1"}]
+        }
+
+        mock_msg_resp = MagicMock()
+        mock_msg_resp.status_code = 200
+        mock_msg_resp.json.return_value = {
+            "id": "msg_auto_1",
+            "snippet": "Test mesajı",
+            "labelIds": ["UNREAD"],
+            "payload": {
+                "headers": [
+                    {"name": "From", "value": "Test <test@example.com>"},
+                    {"name": "Subject", "value": "Test Konusu"},
+                ]
+            },
+        }
+
+        def mock_get(url, **kwargs):
+            if "labels" in url:
+                m = MagicMock()
+                m.status_code = 200
+                m.json.return_value = {"labels": []}
+                return m
+            elif "msg_auto_1" in url:
+                return mock_msg_resp
+            return mock_list_resp
+
+        mock_post_resp = MagicMock()
+        mock_post_resp.status_code = 200
+        mock_post_resp.json.return_value = {"id": "Label_Id"}
+
+        with patch("requests.get", side_effect=mock_get):
+            with patch("requests.post", return_value=mock_post_resp) as mock_post:
+                tool = GmailManagerTool(auth_manager=mock_auth)
+                result = tool.execute(action="summarize_inbox")
+
+                assert result.success is True
+                assert tool._last_summarized_ids == ["msg_auto_1"]
+                # modify endpoint'i çağrılmış olmalı
+                modify_calls = [
+                    call for call in mock_post.call_args_list
+                    if call[1].get("json") == {"removeLabelIds": ["UNREAD"]}
+                ]
+                assert len(modify_calls) == 1
+
+

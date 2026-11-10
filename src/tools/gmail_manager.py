@@ -236,8 +236,8 @@ class GmailManagerTool(BaseTool):
     name = "manage_gmail"
     description = (
         "Gmail gelen kutusunu inceler; e-postaları konusuna göre (Finans, Sosyal Medya, İş & Proje, Eğitim & Gelişim, Alışveriş & Kargo) "
-        "otomatik sınıflandırır, Gmail hesabınızda etiketlerini oluşturup basar ve ne anlattıklarını akıllıca özetler; bülten aboneliklerini iptal eder. "
-        "'Maillerimi etiketle', 'Son gelen mailim ne', 'Finans maillerim var mı', 'Sosyal medya bildirimlerimi özetle' gibi taleplerde bu aracı çağır."
+        "otomatik sınıflandırır, Gmail hesabınızda etiketlerini oluşturup basar, ne anlattıklarını akıllıca özetler ve okundu olarak işaretler; bülten aboneliklerini iptal eder. "
+        "'Maillerimi özetle', 'Okundu yap', 'Özetlediğin mailleri okundu olarak işaretle', 'Mailleri etiketle', 'Finans maillerim var mı' gibi taleplerde bu aracı çağır."
     )
     confirmation_policy = ConfirmationPolicy.IMMEDIATE
 
@@ -262,6 +262,7 @@ class GmailManagerTool(BaseTool):
         self.timeout_ms = timeout_ms
         self._client = client
         self._labels_cache: Dict[str, str] = {}
+        self._last_summarized_ids: List[str] = []
 
     def _get_client(self):
         if self._client is not None:
@@ -375,6 +376,71 @@ class GmailManagerTool(BaseTool):
 
         return False
 
+    def _mark_message_read(self, message_id: str, headers: Dict[str, str]) -> bool:
+        """Belirtilen e-postayı okundu olarak işaretler (UNREAD etiketini kaldırır)."""
+        if not message_id:
+            return False
+
+        try:
+            modify_url = f"{GMAIL_MESSAGES_URL}/{message_id}/modify"
+            resp = requests.post(
+                modify_url,
+                headers=headers,
+                json={"removeLabelIds": ["UNREAD"]},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                logger.info(f"E-posta ({message_id}) okundu olarak işaretlendi.")
+                return True
+        except Exception as e:
+            logger.warning(f"E-posta okundu işaretlenirken hata ({message_id}): {e}")
+
+        return False
+
+    def _handle_mark_as_read(
+        self,
+        query: str,
+        max_results: int,
+        headers: Dict[str, str],
+    ) -> ToolResult:
+        """Özetlenen veya gelen kutusundaki e-postaları okundu olarak işaretler."""
+        from_cached = bool(self._last_summarized_ids)
+        target_ids = list(self._last_summarized_ids)
+
+        # Eğer hafızada son özetlenen e-posta yoksa, gelen kutusundaki okunmamış mailleri sorgula
+        if not target_ids:
+            search_query = query or "is:unread"
+            limit = min(max(1, max_results), 15)
+            resp = requests.get(
+                GMAIL_MESSAGES_URL,
+                headers=headers,
+                params={"q": search_query, "maxResults": limit},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                messages_meta = resp.json().get("messages", [])
+                target_ids = [m.get("id") for m in messages_meta if m.get("id")]
+
+        if not target_ids:
+            return ToolResult(
+                success=True,
+                message="Okundu olarak işaretlenecek okunmamış e-posta bulunamadı efendim.",
+                data={"count": 0},
+            )
+
+        success_count = 0
+        for msg_id in target_ids:
+            if self._mark_message_read(msg_id, headers):
+                success_count += 1
+
+        self._last_summarized_ids.clear()
+        prefix = "Özetlenen" if from_cached else "Belirtilen"
+        return ToolResult(
+            success=True,
+            message=f"{prefix} {success_count} e-posta başarıyla okundu olarak işaretlendi efendim.",
+            data={"count": success_count, "ids": target_ids},
+        )
+
     def get_declaration(self) -> Dict[str, Any]:
         return {
             "name": self.name,
@@ -386,12 +452,17 @@ class GmailManagerTool(BaseTool):
                         "type": "STRING",
                         "description": (
                             "Yapılacak e-posta eylemi: "
-                            "'summarize_inbox' (gelen kutusundaki e-postaları konusuna göre etiketler ve akıllı sesli özet sunar), "
+                            "'summarize_inbox' (gelen kutusundaki e-postaları konusuna göre etiketler, akıllı sesli özet sunar ve okundu olarak işaretler), "
+                            "'mark_as_read' (özetlenen veya gelen kutusundaki e-postaları okundu olarak işaretler), "
                             "'categorize_and_label' (gelen e-postaları konularına [Finans, Sosyal Medya, İş, Eğitim vb.] göre etiketleyip Gmail'de etiketlerini basar), "
                             "'list_newsletters' (reklam ve bülten aboneliklerini listele), "
                             "'unsubscribe' (belirli bir bülten veya reklam aboneliğinden çık)"
                         ),
-                        "enum": ["summarize_inbox", "categorize_and_label", "list_newsletters", "unsubscribe"],
+                        "enum": ["summarize_inbox", "mark_as_read", "categorize_and_label", "list_newsletters", "unsubscribe"],
+                    },
+                    "mark_as_read": {
+                        "type": "BOOLEAN",
+                        "description": "Özetlenen e-postaların otomatik olarak okundu (read) işaretlenip işaretlenmeyeceği (varsayılan: true).",
                     },
                     "category": {
                         "type": "STRING",
@@ -528,7 +599,10 @@ class GmailManagerTool(BaseTool):
                     max_results=max_results,
                     headers=headers,
                     is_categorize_only=(action == "categorize_and_label"),
+                    mark_as_read=kwargs.get("mark_as_read", True),
                 )
+            elif action == "mark_as_read":
+                return self._handle_mark_as_read(query=query, max_results=max_results, headers=headers)
             elif action == "list_newsletters":
                 return self._handle_list_newsletters(max_results, headers)
             elif action == "unsubscribe":
@@ -552,6 +626,7 @@ class GmailManagerTool(BaseTool):
         max_results: int,
         headers: Dict[str, str],
         is_categorize_only: bool = False,
+        mark_as_read: bool = True,
     ) -> ToolResult:
         search_query = query or "is:unread"
         limit = min(max(1, max_results), 15)
@@ -616,6 +691,10 @@ class GmailManagerTool(BaseTool):
                 # Gmail hesabında etiketi oluştur ve e-postaya bas (varsa eski hatalı etiketi kaldırır)
                 self._apply_label_to_message(msg_id, category_name, headers, existing_label_ids=label_ids)
 
+                # Kullanıcı özetlenen e-postaların okundu olarak işaretlenmesini istiyor
+                if mark_as_read:
+                    self._mark_message_read(msg_id, headers)
+
                 is_important = category_name in ("Finans", "İş & Proje", "Kişisel")
 
                 emails.append({
@@ -636,6 +715,9 @@ class GmailManagerTool(BaseTool):
                 message=f"Gelen kutunuzda {count} yeni e-posta var efendim.",
                 data={"count": count, "emails": []},
             )
+
+        # Hafızada son özetlenen e-posta ID'lerini sakla (kullanıcı 'okundu olarak işaretle' dediğinde anında kullanabilmek için)
+        self._last_summarized_ids = [e["id"] for e in emails]
 
         # Kategori filtresi varsa uygula (örn: "Finans maillerim")
         if category_filter:
